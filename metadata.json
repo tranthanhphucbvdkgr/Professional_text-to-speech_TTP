@@ -1,0 +1,6 @@
+{
+  "name": "Professional text-to-speech conversion",
+  "description": "An atmospheric audio generation app using Gemini 3.1 Text-to-Speech to bring your stories to life with various voices.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
