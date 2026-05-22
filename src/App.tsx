@@ -8,40 +8,24 @@ import { GoogleGenAI, Modality } from "@google/genai";
 import { 
   Play, 
   Pause,
-  Square, 
   Download, 
   Loader2, 
   BookOpen, 
-  Volume2, 
   Mic2, 
   RefreshCw,
   Info,
-  Plus,
   Trash2,
-  Save,
-  Star,
   FileUp,
-  FileText,
   HelpCircle,
   Sparkles,
   ChevronRight,
   X,
   ShieldCheck,
-  Wand2,
   Zap,
-  Activity,
-  CloudRain,
-  Wind,
-  Bird,
-  Waves,
-  Coffee,
-  Trees,
-  Flame,
-  CloudLightning,
-  Building2,
-  TrainFront,
-  LibraryBig,
-  AlertCircle
+  AlertCircle,
+  Layout,
+  Target,
+  Layers
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -49,6 +33,55 @@ import * as lamejs from "lamejs";
 import * as mammoth from "mammoth";
 import * as pdfjsLib from "pdfjs-dist";
 import JSZip from "jszip";
+
+// --- Visual Components ---
+
+const GeneratingWaves = () => (
+  <div className="flex items-end justify-center gap-1.5 h-16 w-full">
+    {[...Array(15)].map((_, i) => (
+      <motion.div
+        key={i}
+        animate={{
+          height: [10, 50, 15, 40, 10],
+        }}
+        transition={{
+          duration: 1.2,
+          repeat: Infinity,
+          delay: i * 0.1,
+          ease: "easeInOut"
+        }}
+        className={`w-2 rounded-full shadow-lg ${i % 2 === 0 ? 'bg-blue-500' : 'bg-pink-500'}`}
+      />
+    ))}
+  </div>
+);
+
+const SparklingParticles = () => (
+  <div className="absolute inset-0 pointer-events-none overflow-hidden">
+    {[...Array(30)].map((_, i) => (
+      <motion.div
+        key={i}
+        initial={{ 
+          x: Math.random() * 100 + "%", 
+          y: Math.random() * 100 + "%",
+          opacity: 0,
+          scale: 0
+        }}
+        animate={{ 
+          opacity: [0, 0.8, 0],
+          scale: [0, 1.2, 0],
+          y: ["0%", "-50%"]
+        }}
+        transition={{ 
+          duration: 2 + Math.random() * 2,
+          repeat: Infinity,
+          delay: Math.random() * 2
+        }}
+        className={`absolute w-1 h-1 rounded-full blur-[1px] ${i % 2 === 0 ? 'bg-blue-400' : 'bg-pink-400'}`}
+      />
+    ))}
+  </div>
+);
 
 // Fix for pdfjs worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
@@ -96,7 +129,8 @@ const VOICES: VoiceOption[] = [
 const VALID_TAGS = [
   "warm", "whisper", "tension", "joy", "sadness", "anger", "fear", "mystery",
   "formal", "mellow", "breath", "pause", "southern", "shout", "cold", "sarcastic",
-  "romantic", "energetic", "singing", "humming", "melodic", "vocal", "scream", "laugh"
+  "romantic", "energetic", "singing", "humming", "melodic", "vocal", "scream", "laugh",
+  "hát", "cười lớn", "cười khúc khích", "quát lớn", "hào hứng", "nhẹ nhàng", "giggle"
 ];
 
 const DEFAULT_TRANSCRIPT = `[joy] Xin chào! Mình là Trần Thanh Phúc, [energetic] đây là một ứng dụng chuyển văn bản thành giọng nói theo phong cách kể chuyện. [shout] Các bạn có thể sử dụng nó một cách thoải mái nhất và giọng đọc sẽ hay nhất theo ý thích của các bạn. [mystery] Nào hãy bắt đầu viết nội dung của các bạn vào đây và thực hiện thôi![joy] `;
@@ -401,7 +435,7 @@ export default function App() {
       const speedContext = `Tốc độ nói: ${speed}x (với 1.0 là bình thường, >1.0 là nhanh hơn, <1.0 là chậm hơn). ${speed > 1.2 ? "Hãy nói cực nhanh và dồn dập." : speed < 0.8 ? "Hãy nói thật chậm rãi và thong thả." : ""}`;
       const pitchContext = `Tông giọng (Pitch): ${pitch} (với 0 là bình thường, dương là cao hơn, âm là trầm hơn). ${pitch > 5 ? "Hãy dùng tông giọng rất cao và thanh thoát." : pitch < -5 ? "Hãy dùng tông giọng rất trầm và sâu lắng." : ""}`;
       const combinedInstruction = `[instruction] ${regionContext} ${speedContext} ${pitchContext} ${vocalInstruction}`;
-    const systemDirective = "BẠN LÀ MỘT DIỄN VIÊN LỒNG TIẾNG CHUYÊN NGHIỆP CẤP CAO. Bạn phải thực hiện các chỉ dẫn cảm xúc đặt trong ngoặc vuông như [joy], [shout], [scream], [laugh], [whisper], [vocal], [formal]... bằng cách thay đổi tông giọng, tốc độ nói và hơi thở ngay lập tức. TUYỆT ĐỐI KHÔNG ĐƯỢC ĐỌC CÁC TỪ TRONG NGOẶC VUÔNG. CHỈ ĐỌC VĂN BẢN. Bạn phải tuân thủ nghiêm ngặt các chỉ số Tốc độ và Tông giọng được yêu cầu.";
+    const systemDirective = "BẠN LÀ MỘT DIỄN VIÊN LỒNG TIẾNG CHUYÊN NGHIỆP CẤP CAO. Bạn phải thực hiện các chỉ dẫn cảm xúc đặt trong ngoặc vuông như [joy], [shout], [laugh], [hát], [cười lớn], [cười khúc khích], [quát lớn], [hào hứng], [nhẹ nhàng]... bằng cách thay đổi tông giọng, tốc độ nói và hơi thở ngay lập tức. TUYỆT ĐỐI KHÔNG ĐƯỢC ĐỌC CÁC TỪ TRONG NGOẶC VUÔNG. CHỈ ĐỌC VĂN BẢN. Bạn phải tuân thủ nghiêm ngặt các chỉ số Tốc độ và Tông giọng được yêu cầu.";
     const prompt = `HƯỚNG DẪN HỆ THỐNG: ${systemDirective}\n\nTHIẾT LẬP GIỌNG ĐỌC:\n- ${regionContext}\n- ${speedContext}\n- ${pitchContext}\n- ${vocalInstruction}\n\nKỊCH BẢN CẦN THỰC HIỆN (HÃY DIỄN XUẤT THEO CÁC THẺ TRONG NGOẶC):\n${transcript}`;
 
       const response = await aiRef.current.models.generateContent({
@@ -638,100 +672,128 @@ export default function App() {
   ];
 
   return (
-    <div className="flex flex-col min-h-screen bg-nocturne-bg text-nocturne-text font-sans relative">
-      {/* Global Header */}
-      <header className="z-20 px-6 lg:px-12 pt-8 pb-4 flex items-center justify-between max-w-[1600px] mx-auto w-full">
-        <div className="flex items-center gap-6">
-          <motion.div 
-            whileHover={{ scale: 1.1, rotate: 5 }}
-            className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-nocturne-accent/30 bg-gradient-to-br from-nocturne-bg to-zinc-900 flex items-center justify-center shadow-[0_10px_30px_rgba(0,0,0,0.5),0_0_15px_rgba(225,169,95,0.2)] relative group"
-          >
-            <div className="absolute inset-0 bg-nocturne-accent/5 opacity-0 group-hover:opacity-100 transition-opacity" />
-            <div className="relative">
-              <BookOpen className="w-8 h-8 text-nocturne-accent absolute -translate-x-1/2 -translate-y-1/2 left-1/2 top-1/2 opacity-20 blur-[1px]" />
-              <Mic2 className="w-9 h-9 text-nocturne-accent relative z-10 drop-shadow-[0_0_8px_rgba(225,169,95,0.5)]" />
-              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-nocturne-accent rounded-full border-2 border-nocturne-bg animate-pulse" />
-            </div>
-          </motion.div>
-          <div className="space-y-1.5">
-            <h1 className="text-[11px] uppercase tracking-[6px] text-nocturne-accent/90 font-black">Professional text-to-speech conversion</h1>
-            <h2 className="text-xl md:text-2xl font-serif italic text-white uppercase tracking-[2px] drop-shadow-sm">Văn bản thành giọng kể chuyện</h2>
-          </div>
-        </div>
-        
-        <div className="hidden md:flex items-center gap-3 bg-white/5 px-4 py-2 rounded-full border border-white/5">
-          <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-[9px] uppercase tracking-[2px] text-nocturne-dim font-bold">Máy chủ sẵn sàng</span>
-        </div>
-      </header>
-
-      {/* Atmospheric Gradients & Grain */}
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden bg-black">
+    <div className="min-h-screen bg-app-bg text-app-text font-sans relative overflow-hidden flex flex-col selection:bg-app-accent/20">
+      {/* Dynamic Background */}
+      <div className="fixed inset-0 z-0">
+        <div className="absolute inset-0 bg-white" />
         <motion.div 
           animate={{ 
-            opacity: isPlaying ? [0.12, 0.2, 0.12] : 0.12,
-            scale: isPlaying ? [1, 1.05, 1] : 1
+            opacity: [0.1, 0.2, 0.1],
+            scale: [1, 1.1, 1]
           }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(225,169,95,0.2)_0%,transparent_60%)]" 
+          transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute -top-[20%] -right-[10%] w-[60%] h-[60%] rounded-full bg-blue-200/40 blur-[120px]" 
         />
         <motion.div 
           animate={{ 
-            opacity: isPlaying ? [0.15, 0.25, 0.15] : 0.15,
-            scale: isPlaying ? [1, 1.1, 1] : 1
+            opacity: [0.1, 0.15, 0.1],
+            scale: [1, 1.2, 1]
           }}
-          transition={{ duration: 12, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-          className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(60,80,110,0.3)_0%,transparent_60%)]" 
+          transition={{ duration: 20, repeat: Infinity, ease: "easeInOut", delay: 2 }}
+          className="absolute -bottom-[20%] -left-[10%] w-[50%] h-[50%] rounded-full bg-pink-200/30 blur-[100px]" 
         />
-        <div className="absolute inset-0 opacity-[0.03] mix-blend-overlay pointer-events-none bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
+        <div className="absolute inset-0 opacity-[0.4] pointer-events-none bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
         
-        {/* Floating Particles/Dust */}
+        {/* Colorful Particles */}
         <div className="absolute inset-0">
-          {[...Array(20)].map((_, i) => (
+          {[...Array(15)].map((_, i) => (
             <motion.div
               key={i}
               initial={{ 
                 x: Math.random() * 100 + "%", 
                 y: Math.random() * 100 + "%",
-                opacity: Math.random() * 0.3
+                opacity: 0.1
               }}
               animate={{ 
-                y: ["0%", "-20%", "0%"],
-                opacity: isPlaying ? [0.1, 0.4, 0.1] : [0.1, 0.2, 0.1],
-                scale: isPlaying ? [1, 1.5, 1] : 1
+                y: ["0%", "-10%", "0%"],
+                x: ["0%", "5%", "0%"],
+                opacity: [0.1, 0.3, 0.1],
               }}
               transition={{ 
-                duration: 10 + Math.random() * 20, 
+                duration: 15 + Math.random() * 10, 
                 repeat: Infinity, 
                 ease: "linear",
                 delay: Math.random() * 10
               }}
-              className="absolute w-1 h-1 bg-nocturne-accent/30 rounded-full blur-[1px]"
+              className={`absolute w-4 h-4 rounded-full blur-[2px] ${i % 3 === 0 ? 'bg-blue-400/20' : i % 3 === 1 ? 'bg-pink-400/20' : 'bg-indigo-400/20'}`}
             />
           ))}
         </div>
       </div>
 
+      <header className="h-20 lg:h-24 px-6 lg:px-10 border-b border-app-accent/5 flex items-center justify-between z-20 relative bg-white/40 backdrop-blur-md">
+        <div className="flex items-center gap-6">
+          <motion.div 
+            whileHover={{ scale: 1.05, rotate: 2 }}
+            className="w-14 h-14 md:w-16 md:h-16 rounded-[22px] bg-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] border border-app-accent/10 flex items-center justify-center relative overflow-hidden"
+          >
+            <div className="absolute inset-0 bg-gradient-to-tr from-app-accent/10 to-app-secondary/10" />
+            <div className="relative">
+              <BookOpen className="w-8 h-8 text-app-accent absolute -translate-x-1/2 -translate-y-1/2 left-1/2 top-1/2 opacity-20 blur-[1px]" />
+              <Mic2 className="w-9 h-9 text-app-accent relative z-10" />
+              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-app-secondary rounded-full border-2 border-white animate-pulse shadow-md" />
+            </div>
+          </motion.div>
+          <div className="space-y-1">
+            <h1 className="text-[10px] uppercase tracking-[4px] text-app-accent font-black">AI Voice Professional</h1>
+            <h2 className="text-xl md:text-2xl font-serif font-black text-app-text tracking-tight uppercase">Văn bản thành giọng kể chuyện</h2>
+          </div>
+        </div>
+        
+        <div className="hidden md:flex items-center gap-3 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.05)] px-5 py-2.5 rounded-full border border-app-accent/5">
+          <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+          <span className="text-[10px] uppercase tracking-[2px] text-app-accent font-black">Hệ thống sẵn sàng</span>
+        </div>
+      </header>
+
       <main className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-8 p-4 lg:p-8 z-10 max-w-[1700px] mx-auto w-full overflow-hidden">
         {/* Narrative Viewport */}
         <motion.section 
           animate={{ 
-            borderColor: isPlaying ? "rgba(225, 169, 95, 0.4)" : "rgba(255, 255, 255, 0.05)",
-            boxShadow: isPlaying ? "0 0 50px rgba(225, 169, 95, 0.15)" : "0 20px 60px rgba(0,0,0,0.6)"
+            borderColor: isPlaying ? "rgba(59, 130, 246, 0.4)" : "rgba(0, 0, 0, 0.05)",
+            boxShadow: isPlaying ? "0 20px 40px rgba(59, 130, 246, 0.1)" : "0 10px 40px rgba(0,0,0,0.04)"
           }}
-          className="bg-nocturne-glass border border-nocturne-glass-border rounded-[28px] p-8 md:p-10 flex flex-col backdrop-blur-2xl overflow-hidden min-h-[500px] shadow-2xl relative"
+          className="bg-white/80 border border-black/5 rounded-[32px] p-8 md:p-10 flex flex-col backdrop-blur-xl overflow-hidden min-h-[500px] shadow-xl relative"
         >
-          <div className="flex items-center justify-between mb-8 pb-4 border-b border-white/5 relative">
-            <div className="absolute -bottom-px left-0 w-24 h-px bg-gradient-to-r from-nocturne-accent to-transparent" />
-            <div className="flex items-center gap-5 bg-white/[0.03] border border-white/5 px-4 py-2 rounded-2xl relative z-10">
-              <div className="font-serif font-black text-2xl tracking-[2px] text-nocturne-accent select-none uppercase">
-                NỘI DUNG
+          {/* Overlay for generating */}
+          <AnimatePresence>
+            {isGenerating && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 z-50 bg-white/60 backdrop-blur-sm flex flex-col items-center justify-center p-12 text-center"
+              >
+                <SparklingParticles />
+                <div className="bg-white p-10 rounded-[40px] shadow-[0_20px_60px_rgba(0,0,0,0.1)] border border-blue-100 flex flex-col items-center gap-8 relative overflow-hidden">
+                  <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-blue-400 via-pink-400 to-blue-400 animate-pulse" />
+                  <GeneratingWaves />
+                  <div className="space-y-3">
+                    <h3 className="text-2xl font-serif font-black text-app-text">Đang tạo giọng nói AI...</h3>
+                    <p className="text-app-dim text-sm max-w-xs mx-auto">Vui lòng chờ trong giây lát, trí tuệ nhân tạo đang thổi hồn vào câu chuyện của bạn.</p>
+                  </div>
+                  <motion.div 
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                    className="p-3 rounded-full bg-blue-50"
+                  >
+                    <RefreshCw className="w-6 h-6 text-blue-500" />
+                  </motion.div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <div className="flex items-center justify-between mb-8 pb-4 border-b border-black/5 relative">
+            <div className="absolute -bottom-px left-0 w-24 h-px bg-gradient-to-r from-app-accent to-transparent" />
+            <div className="flex items-center gap-5 bg-black/[0.02] border border-black/5 px-5 py-2.5 rounded-2xl relative z-10 transition-all hover:bg-black/[0.04]">
+              <div className="font-serif font-black text-2xl tracking-[1px] text-app-accent select-none uppercase">
+                CONTENT
               </div>
-              <span className="font-serif text-[10px] uppercase tracking-[2px] text-nocturne-accent font-black mt-0.5 border-l border-white/10 pl-4">
-                 {isGenerating ? "Đang xử lý..." : "Kịch bản"}
+              <span className="font-serif text-[10px] uppercase tracking-[2px] text-app-accent font-black mt-0.5 border-l border-black/10 pl-4">
+                 {isGenerating ? "Đang xử lý" : "Kịch bản"}
               </span>
               
-              <div className="h-6 w-[1px] bg-white/5 mx-2" />
+              <div className="h-6 w-[1px] bg-black/5 mx-2" />
               
               <input 
                 type="file" 
@@ -742,21 +804,21 @@ export default function App() {
               />
               
               <motion.button
-                whileHover={{ scale: 1.05, backgroundColor: "rgba(225, 169, 95, 0.15)" }}
+                whileHover={{ scale: 1.05, backgroundColor: "#3B82F6", color: "#FFFFFF" }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
-                className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-nocturne-accent/10 border border-nocturne-accent/20 text-nocturne-accent transition-all group shadow-lg active:shadow-none"
+                className="flex items-center gap-2.5 px-5 py-2 rounded-xl bg-app-accent/5 border border-app-accent/10 text-app-accent transition-all group shadow-sm font-black"
               >
                 {isUploading ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin text-app-accent" />
                 ) : (
-                  <FileUp className="w-3.5 h-3.5 group-hover:-translate-y-0.5 transition-transform" />
+                  <FileUp className="w-4 h-4 group-hover:-translate-y-0.5 transition-transform" />
                 )}
-                <span className="text-[10px] uppercase tracking-[1.5px] font-serif font-black">TẢI TÀI LIỆU</span>
+                <span className="text-[10px] uppercase tracking-[1px] font-serif">TẢI TÀI LIỆU</span>
               </motion.button>
             </div>
-            <div className="text-[10px] text-nocturne-accent/60 font-mono tracking-widest font-bold">
+            <div className="text-[10px] text-app-accent/60 font-mono tracking-widest font-black bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">
               #{transcript.length.toString().padStart(4, '0')}
             </div>
           </div>
@@ -778,7 +840,7 @@ export default function App() {
                   return (
                     <span 
                       key={i} 
-                      className="inline-flex items-center text-nocturne-accent font-bold rounded bg-nocturne-accent/10 drop-shadow-[0_0_8px_rgba(225,169,95,0.4)] pointer-events-auto group/tag cursor-default relative z-30"
+                      className="inline-flex items-center text-app-secondary font-black rounded-lg bg-pink-50 border border-pink-100 px-1 py-0.5 pointer-events-auto group/tag cursor-default relative z-30 shadow-sm"
                     >
                       {part}
                       <button 
@@ -787,17 +849,16 @@ export default function App() {
                           e.preventDefault();
                           removeTagAt(i);
                         }}
-                        className="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover/tag:opacity-100 bg-red-500 text-white rounded-full p-1 transition-all pointer-events-auto scale-75 hover:scale-100 shadow-[0_0_15px_rgba(239,68,68,0.5)] z-40"
+                        className="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover/tag:opacity-100 bg-app-secondary text-white rounded-full p-1 transition-all pointer-events-auto scale-75 hover:scale-100 shadow-md z-40"
                         title="Xóa thẻ"
                       >
-                        <X className="w-3 h-3" />
+                        <X className="w-3 h-3 text-white" />
                       </button>
                     </span>
                   );
                 }
-                return <span key={i} className="text-white">{part}</span>;
+                return <span key={i} className="text-app-text">{part}</span>;
               })}
-              {/* Ensure whitespace at the end is visible */}
               {transcript.endsWith('\n') && <br />}
             </div>
 
@@ -812,11 +873,7 @@ export default function App() {
                 if (overlay) overlay.scrollTop = e.currentTarget.scrollTop;
               }}
               placeholder="Nhập kịch bản của bạn tại đây..."
-              animate={{ 
-                opacity: isPlaying ? [0.6, 1, 0.6] : 1,
-              }}
-              transition={{ duration: 4, repeat: isPlaying ? Infinity : 0, ease: "easeInOut" }}
-              className={`w-full h-full bg-transparent border-none p-0 font-serif leading-relaxed text-transparent caret-white focus:outline-none transition-all placeholder:text-stone-800 resize-none selection:bg-nocturne-accent/20 custom-scrollbar overflow-y-auto relative z-10 ${getFontSizeClass()}`}
+              className={`w-full h-full bg-transparent border-none p-0 font-serif leading-relaxed text-transparent caret-app-accent focus:outline-none transition-all placeholder:text-gray-300 resize-none selection:bg-app-accent/20 custom-scrollbar overflow-y-auto relative z-10 ${getFontSizeClass()}`}
               style={{ 
                 textShadow: "none", 
                 color: "transparent",
@@ -830,60 +887,64 @@ export default function App() {
           <AnimatePresence>
             {vocalInstruction && (
               <motion.div 
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="mt-4 p-3 bg-nocturne-accent/5 rounded-lg border border-nocturne-accent/20 flex items-center justify-between"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="mt-6 p-4 bg-blue-50/50 rounded-2xl border border-blue-100 flex items-center justify-between shadow-sm"
               >
-                <div className="flex items-center gap-2 overflow-hidden">
-                  <Mic2 className="w-3 h-3 text-nocturne-accent flex-shrink-0" />
-                  <span className="text-[10px] uppercase tracking-wider text-nocturne-accent/70 font-bold truncate">
+                <div className="flex items-center gap-3 overflow-hidden">
+                  <div className="p-2 bg-white rounded-xl shadow-sm">
+                    <Mic2 className="w-4 h-4 text-app-accent flex-shrink-0" />
+                  </div>
+                  <span className="text-[11px] uppercase tracking-wider text-app-accent font-black truncate">
                     Đặc trưng: {vocalInstruction}
                   </span>
                 </div>
                 <button 
                   onClick={() => setVocalInstruction("")}
-                  className="text-nocturne-dim hover:text-nocturne-accent p-1"
+                  className="p-2 hover:bg-white rounded-xl transition-all text-app-dim hover:text-red-500"
                 >
-                  <Trash2 className="w-3 h-3" />
+                  <Trash2 className="w-4 h-4" />
                 </button>
               </motion.div>
             )}
           </AnimatePresence>
           
           {/* Command Bar */}
-          <div className="mt-6 pt-6 border-t border-white/5">
-            <div className="flex items-center justify-between mb-2 px-1">
-              <div className="flex items-center gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-nocturne-accent/40" />
-                <span className="text-[9px] uppercase tracking-[2px] text-nocturne-dim font-bold">Dòng lệnh</span>
+          <div className="mt-8 pt-6 border-t border-black/5">
+            <div className="flex items-center justify-between mb-3 px-1">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 bg-blue-50 rounded-lg">
+                  <Zap className="w-3 h-3 text-app-accent" />
+                </div>
+                <span className="text-[10px] uppercase tracking-[2px] text-app-dim font-black">Lệnh nhanh</span>
               </div>
               
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-2">
                 <div className="relative">
                   <motion.button 
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
                     onClick={() => {
                       setShowPresets(!showPresets);
                       setShowHelp(false);
                     }}
-                    className={`flex items-center gap-1.5 px-2 py-1 rounded-md transition-all ${showPresets ? 'bg-nocturne-accent text-black text-[9px] font-bold' : 'text-nocturne-dim hover:text-nocturne-accent bg-white/5'}`}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all shadow-sm ${showPresets ? 'bg-app-accent text-white font-black' : 'text-app-accent hover:bg-app-accent/5 bg-white border border-app-accent/10'}`}
                   >
-                    <Sparkles className="w-3 h-3" />
-                    <span className="text-[8px] uppercase tracking-wider font-bold">Mẫu</span>
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span className="text-[9px] uppercase tracking-wider font-black">Thư viện mẫu</span>
                   </motion.button>
                   
                   <AnimatePresence>
                     {showPresets && (
                       <motion.div
-                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                        className="absolute bottom-full right-0 mb-3 w-56 bg-black/95 border border-nocturne-accent/40 rounded-xl p-2 shadow-2xl backdrop-blur-2xl z-50 overflow-hidden"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: 10 }}
+                        className="absolute bottom-full right-0 mb-3 w-64 bg-white border border-black/5 rounded-2xl p-2 shadow-[0_20px_50px_rgba(0,0,0,0.15)] backdrop-blur-xl z-50 overflow-hidden"
                       >
-                        <div className="text-[9px] uppercase tracking-widest font-bold text-nocturne-accent/60 mb-2 px-2 py-1 border-b border-white/5">Chọn mẫu giọng</div>
-                        <div className="grid grid-cols-1 gap-1 max-h-[300px] overflow-y-auto custom-scrollbar">
+                        <div className="text-[9px] uppercase tracking-widest font-black text-app-dim mb-2 px-3 py-2 border-b border-black/5">Chọn kịch bản mẫu</div>
+                        <div className="grid grid-cols-1 gap-1 max-h-[300px] overflow-y-auto custom-scrollbar p-1">
                           {COMMAND_PRESETS.map((preset, idx) => (
                             <button
                               key={idx}
@@ -891,10 +952,10 @@ export default function App() {
                                 setCommand(preset.cmd);
                                 setShowPresets(false);
                               }}
-                              className="flex items-center justify-between text-left px-3 py-2.5 rounded-lg hover:bg-nocturne-accent/10 group transition-all"
+                              className="flex items-center justify-between text-left px-3 py-3 rounded-xl hover:bg-blue-50 group transition-all"
                             >
-                              <span className="text-[10px] text-zinc-300 group-hover:text-nocturne-accent transition-colors">{preset.label}</span>
-                              <ChevronRight className="w-3 h-3 text-zinc-600 group-hover:text-nocturne-accent" />
+                              <span className="text-[11px] font-medium text-app-text group-hover:text-app-accent transition-colors">{preset.label}</span>
+                              <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-app-accent" />
                             </button>
                           ))}
                         </div>
@@ -903,7 +964,7 @@ export default function App() {
                   </AnimatePresence>
                 </div>
 
-                <div className="relative border-l border-white/10 pl-1 ml-1">
+                <div className="relative ml-1">
                   <button 
                     onMouseEnter={() => setShowHelp(true)}
                     onMouseLeave={() => setShowHelp(false)}
@@ -911,32 +972,32 @@ export default function App() {
                       setShowHelp(!showHelp);
                       setShowPresets(false);
                     }}
-                    className="text-nocturne-dim hover:text-nocturne-accent transition-colors p-1"
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-app-dim hover:text-app-accent hover:bg-white shadow-sm border border-transparent hover:border-black/5 transition-all"
                   >
-                    <HelpCircle className="w-3.5 h-3.5" />
+                    <HelpCircle className="w-4 h-4" />
                   </button>
                   
                   <AnimatePresence>
                     {showHelp && (
                       <motion.div
-                        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                        animate={{ opacity: 1, scale: 1, y: 0 }}
-                        exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                        className="absolute bottom-full right-0 mb-3 w-64 bg-black/90 border border-nocturne-accent/30 rounded-xl p-4 shadow-2xl backdrop-blur-xl z-50 pointer-events-none"
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="absolute bottom-full right-0 mb-3 w-64 bg-white border border-black/5 rounded-2xl p-5 shadow-2xl backdrop-blur-xl z-50 pointer-events-none"
                       >
-                        <h4 className="text-nocturne-accent text-[10px] uppercase tracking-widest font-bold mb-3 border-b border-white/10 pb-2">Hướng dẫn dòng lệnh</h4>
-                        <div className="space-y-3">
-                          <div>
-                            <code className="text-white text-[10px] bg-white/10 px-1 rounded">/voice [tên]</code>
-                            <p className="text-nocturne-dim text-[9px] mt-1 italic">Thay đổi giọng đọc (vd: /voice puck)</p>
+                        <h4 className="text-app-accent text-[11px] uppercase tracking-widest font-black mb-4 border-b border-black/5 pb-2">Hướng dẫn lệnh</h4>
+                        <div className="space-y-4">
+                          <div className="bg-blue-50/50 p-2 rounded-xl">
+                            <code className="text-app-accent text-[10px] font-black">/voice [tên]</code>
+                            <p className="text-app-dim text-[10px] mt-1 font-medium">Thay đổi giọng đọc nhanh</p>
                           </div>
-                          <div>
-                            <code className="text-white text-[10px] bg-white/10 px-1 rounded">/set [mô tả]</code>
-                            <p className="text-nocturne-dim text-[9px] mt-1 italic">Thiết lập đặc trưng giọng (vd: /set giọng ấm)</p>
+                          <div className="bg-pink-50/50 p-2 rounded-xl">
+                            <code className="text-app-secondary text-[10px] font-black">/set [mô tả]</code>
+                            <p className="text-app-dim text-[10px] mt-1 font-medium">Gán đặc tính cảm xúc</p>
                           </div>
-                          <div>
-                            <code className="text-white text-[10px] bg-white/10 px-1 rounded">/clear</code>
-                            <p className="text-nocturne-dim text-[9px] mt-1 italic">Xóa toàn bộ nội dung kịch bản</p>
+                          <div className="bg-gray-50 p-2 rounded-xl">
+                            <code className="text-app-text text-[10px] font-black">/clear</code>
+                            <p className="text-app-dim text-[10px] mt-1 font-medium">Làm sạch kịch bản</p>
                           </div>
                         </div>
                       </motion.div>
@@ -946,402 +1007,289 @@ export default function App() {
               </div>
             </div>
 
-            <form onSubmit={handleCommand} className="relative">
-              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-nocturne-accent/50 text-sm font-mono tracking-tighter select-none">
+            <form onSubmit={handleCommand} className="relative group/input">
+              <div className="absolute left-5 top-1/2 -translate-y-1/2 text-app-accent font-black text-sm select-none transition-transform group-focus-within/input:scale-110">
                 {">"}
               </div>
               <input
                 type="text"
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
-                placeholder="Mô tả giọng nói (ví dụ: giọng miền Nam, nam bộ, tự nhiên, rõ ràng,...)"
-                className="w-full bg-black/30 border border-white/5 rounded-xl pl-10 pr-4 py-4 text-sm text-nocturne-text focus:outline-none focus:border-nocturne-accent/50 transition-all placeholder:text-stone-700 font-mono shadow-inner"
+                placeholder="Mô tả chất giọng hoặc dùng lệnh nhanh tại đây..."
+                className="w-full bg-white border border-black/5 rounded-[22px] pl-10 pr-5 py-5 text-[13px] text-app-text focus:outline-none focus:ring-2 focus:ring-app-accent/10 focus:border-app-accent/30 transition-all placeholder:text-gray-300 font-medium shadow-[0_4px_20px_rgba(0,0,0,0.03)]"
               />
             </form>
           </div>
         </motion.section>
 
         {/* Controls Panel */}
-        <aside className="flex flex-col gap-4 overflow-y-auto scrollbar-hide">
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-nocturne-accent shadow-[0_0_8px_rgba(225,169,95,0.5)]" />
-              <span className="text-[9px] uppercase tracking-[2px] text-nocturne-dim font-bold">NOCTURNE v3.1</span>
+        <aside className="flex flex-col gap-6 overflow-y-auto scrollbar-hide">
+          <div className="flex items-center justify-between px-2">
+            <div className="flex items-center gap-3">
+              <div className="w-2.5 h-2.5 rounded-full bg-app-accent shadow-[0_0_10px_rgba(59,130,246,0.4)]" />
+              <span className="text-[11px] uppercase tracking-[3px] text-app-text font-black">CONTROL HUB 4.0</span>
             </div>
-            <div className="text-[8px] text-nocturne-dim font-mono opacity-50 uppercase tracking-tighter">
-              {new Date().toLocaleDateString('vi-VN')}
+            <div className="px-3 py-1 bg-white rounded-full border border-black/5 text-[9px] text-app-dim font-black uppercase tracking-tighter shadow-sm">
+              LIVE BROADCAST
             </div>
           </div>
 
           {/* Acting Tags Card */}
-          <div className="bg-white/[0.04] border border-white/10 rounded-[24px] p-6 space-y-5 shadow-2xl relative overflow-hidden group/tags transition-all hover:bg-white/[0.06] hover:border-white/20">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-nocturne-accent/5 blur-[60px] pointer-events-none" />
+          <div className="bg-white border border-black/5 rounded-[32px] p-7 space-y-6 shadow-xl relative overflow-hidden group/tags transition-all hover:shadow-2xl">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-pink-200/20 blur-[60px] pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-24 h-24 bg-blue-200/10 blur-[50px] pointer-events-none" />
+            
             <div className="flex items-center justify-between relative z-10">
-              <h3 className="text-[12px] uppercase tracking-[2px] text-nocturne-text font-black flex items-center gap-3">
-                <div className="p-1.5 rounded-lg bg-nocturne-accent/10 border border-nocturne-accent/20">
-                  <BookOpen className="w-4 h-4 text-nocturne-accent" />
+              <h3 className="text-[12px] uppercase tracking-[2px] text-app-text font-black flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-pink-50 border border-pink-100 shadow-sm">
+                  <Layout className="w-5 h-5 text-app-secondary" />
                 </div>
-                Thẻ diễn xuất
+                Cảm xúc kịch bản
               </h3>
-              <div className="flex gap-2.5">
-                {tagValidationReport && (
-                  <button 
-                    onClick={() => setTagValidationReport(null)}
-                    className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 transition-all shadow-lg active:scale-90 border border-red-500/20"
-                    title="Đóng báo cáo lỗi"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
+              <div className="flex gap-2">
                 <button 
                   onClick={validateTags}
-                  className={`p-2 rounded-xl transition-all shadow-lg active:scale-90 border ${
-                    tagValidationReport ? "bg-nocturne-accent text-nocturne-bg border-nocturne-accent" : "bg-white/5 hover:bg-nocturne-accent/20 text-nocturne-dim hover:text-nocturne-accent border-white/5 hover:border-nocturne-accent/30"
+                  className={`px-4 py-2 rounded-xl transition-all shadow-sm font-black text-[10px] uppercase tracking-wider border ${
+                    tagValidationReport ? "bg-app-secondary text-white border-app-secondary shadow-pink-200" : "bg-white hover:bg-gray-50 text-app-text border-black/5"
                   }`}
-                  title="Kiểm tra thẻ chi tiết"
                 >
                   <ShieldCheck className="w-4 h-4" />
                 </button>
-                <button 
-                  onClick={() => insertTag("[pause]")}
-                  className="text-[9px] bg-nocturne-accent/10 border border-nocturne-accent/20 text-nocturne-accent px-3 py-1.5 rounded-xl font-mono font-bold hover:bg-nocturne-accent text-nocturne-bg transition-all uppercase tracking-wider shadow-lg"
-                >
-                  Hết hơi
-                </button>
               </div>
             </div>
 
-            <AnimatePresence>
-              {tagValidationReport && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="bg-red-500/5 border border-red-500/20 rounded-2xl p-4 mb-4 space-y-3 relative overflow-hidden"
-                >
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-red-500/5 blur-2xl pointer-events-none" />
-                  
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-red-500 flex items-center gap-2">
-                      <AlertCircle className="w-3 h-3" />
-                      Phát hiện lỗi thẻ
-                    </h4>
-                  </div>
-
-                  <div className="space-y-2.5">
-                    {tagValidationReport.unknown.map((err, i) => (
-                      <div key={i} className="bg-black/20 p-2 rounded-lg border border-white/5">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-white/80 font-mono text-[10px] line-through decoration-red-500/50">{err.tag}</span>
-                          <span className="text-[9px] text-nocturne-dim uppercase font-bold">Không xác định</span>
-                        </div>
-                        {err.suggestion && (
-                          <div className="mt-1.5 flex items-center gap-2">
-                            <span className="text-[9px] text-green-500/70 uppercase font-black">Gợi ý:</span>
-                            <button 
-                              onClick={() => {
-                                setTranscript(transcript.replace(err.tag, err.suggestion!));
-                                setTagValidationReport({
-                                  ...tagValidationReport,
-                                  unknown: tagValidationReport.unknown.filter((_, idx) => idx !== i)
-                                });
-                              }}
-                              className="text-green-500 font-mono text-[10px] hover:underline"
-                            >
-                              {err.suggestion}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-
-                    {tagValidationReport.malformed.map((err, i) => (
-                      <div key={i} className="bg-black/20 p-2 rounded-lg border border-red-500/20">
-                        <p className="text-red-400 text-[10px] font-medium">{err}</p>
-                      </div>
-                    ))}
-
-                    {tagValidationReport.duplicate.map((tag, i) => (
-                      <div key={i} className="bg-black/20 p-2 rounded-lg border border-white/5 opacity-60">
-                        <div className="flex items-center justify-between">
-                          <span className="text-white/50 font-mono text-[10px]">{tag}</span>
-                          <span className="text-[8px] text-nocturne-dim uppercase font-bold tracking-tighter">Lặp lại</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <button 
-                    onClick={() => {
-                      let cleaned = transcript;
-                      tagValidationReport.unknown.forEach(u => cleaned = cleaned.replace(u.tag, ""));
-                      cleaned = cleaned.replace(/\s\s+/g, ' ').trim();
-                      setTranscript(cleaned);
-                      setTagValidationReport(null);
-                      setCommandFeedback("Đã tự động dọn dẹp các thẻ lỗi.");
-                    }}
-                    className="w-full py-2 bg-red-500/20 hover:bg-red-500/30 text-red-500 text-[9px] font-black uppercase tracking-widest rounded-lg transition-all border border-red-500/30"
-                  >
-                    Dọn dẹp tất cả lỗi
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <div className="grid grid-cols-4 gap-2 max-h-[240px] overflow-y-auto pr-1 custom-scrollbar relative z-10">
+            <div className="grid grid-cols-4 gap-3 max-h-[320px] overflow-y-auto pr-1 custom-scrollbar relative z-10 p-1">
               {[
-                { tag: "[warm]", desc: "Ấm" },
-                { tag: "[whisper]", desc: "Thì thầm" },
-                { tag: "[tension]", desc: "Kịch" },
-                { tag: "[joy]", desc: "Vui" },
-                { tag: "[sadness]", desc: "Sầu" },
-                { tag: "[anger]", desc: "Giận" },
-                { tag: "[fear]", desc: "Sợ" },
-                { tag: "[mystery]", desc: "Lạ" },
-                { tag: "[formal]", desc: "Trang" },
-                { tag: "[mellow]", desc: "Cảm" },
-                { tag: "[breath]", desc: "Hơi" },
-                { tag: "[pause]", desc: "Nghỉ" },
-                { tag: "[southern]", desc: "Rặt" },
-                { tag: "[shout]", desc: "Quát" },
-                { tag: "[scream]", desc: "Hét" },
-                { tag: "[laugh]", desc: "Cười" },
-                { tag: "[cold]", desc: "Lạnh" },
-                { tag: "[sarcastic]", desc: "Mỉa" },
-                { tag: "[romantic]", desc: "Iu" },
-                { tag: "[energetic]", desc: "Sung" },
-                { tag: "[singing]", desc: "Hát" },
-                { tag: "[humming]", desc: "Ngâm" },
-                { tag: "[melodic]", desc: "Nhạc" },
-                { tag: "[vocal]", desc: "Ca" },
-              ].map((t) => (
-                <button 
-                  key={t.tag}
-                  onClick={() => insertTag(t.tag)}
-                  className="bg-white/[0.03] border border-white/10 p-2 rounded-xl flex flex-col items-center justify-center gap-1 hover:bg-nocturne-accent hover:border-nocturne-accent transition-all group active:scale-95 shadow-md hover:shadow-nocturne-accent/20"
-                >
-                  <span className="text-nocturne-accent group-hover:text-black text-[10px] font-mono font-bold tracking-tighter truncate w-full text-center">{t.tag.replace('[', '').replace(']', '')}</span>
-                  <span className="text-[8px] text-nocturne-dim group-hover:text-black/80 font-bold uppercase tracking-tighter truncate w-full text-center">{t.desc}</span>
-                </button>
-              ))}
-            </div>
-            
-            <div className="pt-3 border-t border-white/5 flex items-center justify-between relative z-10">
-              <div className="text-[9px] text-nocturne-dim italic font-medium">
-                * Chạm để chèn thẻ vào vị trí con trỏ
-              </div>
-              <div className="text-[9px] bg-nocturne-accent/5 border border-nocturne-accent/10 px-2 py-0.5 rounded-lg text-nocturne-accent font-mono opacity-60">
-                PROMPT_V3
-              </div>
-            </div>
-          </div>
-
-          {/* Voice Config Card */}
-          <div className="bg-white/[0.04] border border-white/10 rounded-[28px] p-6 space-y-5 shadow-2xl relative overflow-hidden group/voice transition-all hover:bg-white/[0.05]">
-            <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-blue-500/5 blur-[80px] pointer-events-none" />
-            <h3 className="text-[12px] uppercase tracking-[2px] text-nocturne-text font-black flex items-center gap-3 relative z-10">
-              <div className="p-1.5 rounded-lg bg-white/5 border border-white/10">
-                <Volume2 className="w-4 h-4 text-nocturne-accent" />
-              </div>
-              Giọng đọc
-            </h3>
-            
-            {/* Speed & Pitch Controls */}
-            <div className="grid grid-cols-2 gap-4 pb-4 border-b border-white/10 relative z-10">
-              <div className="space-y-4 p-4 rounded-[20px] bg-white/[0.02] border border-white/5 hover:border-nocturne-accent/30 transition-all group/speed shadow-inner">
-                <div className="flex justify-between items-center text-[10px] uppercase tracking-widest text-nocturne-dim font-black">
-                  <div className="flex items-center gap-2 grayscale group-hover/speed:grayscale-0 transition-all">
-                    <Zap className="w-3.5 h-3.5 text-nocturne-accent" />
-                    <span>Tốc độ</span>
-                  </div>
-                  <span className="bg-nocturne-accent/10 border border-nocturne-accent/20 text-nocturne-accent px-2 py-0.5 rounded-lg text-[10px] min-w-[36px] text-center font-mono">{speed}x</span>
-                </div>
-                <input 
-                  type="range"
-                  min="0.5"
-                  max="2.0"
-                  step="0.1"
-                  value={speed}
-                  onChange={(e) => setSpeed(parseFloat(e.target.value))}
-                  className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-nocturne-accent transition-all hover:h-1.5"
-                />
-              </div>
-              <div className="space-y-4 p-4 rounded-[20px] bg-white/[0.02] border border-white/5 hover:border-nocturne-accent/30 transition-all group/pitch shadow-inner">
-                <div className="flex justify-between items-center text-[10px] uppercase tracking-widest text-nocturne-dim font-black">
-                   <div className="flex items-center gap-2 grayscale group-hover/pitch:grayscale-0 transition-all">
-                    <Activity className="w-3.5 h-3.5 text-nocturne-accent" />
-                    <span>Độ cao</span>
-                  </div>
-                  <span className="bg-nocturne-accent/10 border border-nocturne-accent/20 text-nocturne-accent px-2 py-0.5 rounded-lg text-[10px] min-w-[36px] text-center font-mono">{pitch > 0 ? `+${pitch}` : pitch}</span>
-                </div>
-                <input 
-                  type="range"
-                  min="-10"
-                  max="10"
-                  step="1"
-                  value={pitch}
-                  onChange={(e) => setPitch(parseInt(e.target.value))}
-                  className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-nocturne-accent transition-all hover:h-1.5"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-2 max-h-[360px] overflow-y-auto pr-1 custom-scrollbar scroll-smooth relative z-10">
-              {VOICES.map((v) => (
+                { tag: "[warm]", desc: "Ấm p", icon: "🔥" },
+                { tag: "[whisper]", desc: "Thì", icon: "👂" },
+                { tag: "[tension]", desc: "Kịch", icon: "🌋" },
+                { tag: "[joy]", desc: "Vui", icon: "✨" },
+                { tag: "[sadness]", desc: "Sầu", icon: "💧" },
+                { tag: "[anger]", desc: "Giận", icon: "⚡" },
+                { tag: "[fear]", desc: "Sợ", icon: "🕯️" },
+                { tag: "[mystery]", desc: "Lạ", icon: "🎭" },
+                { tag: "[hát]", desc: "Hát", icon: "🎤" },
+                { tag: "[cười lớn]", desc: "Cười lớn", icon: "😆" },
+                { tag: "[cười khúc khích]", desc: "Khúc khích", icon: "🤭" },
+                { tag: "[quát lớn]", desc: "Quát lớn", icon: "🗯️" },
+                { tag: "[hào hứng]", desc: "Hào hứng", icon: "🤩" },
+                { tag: "[nhẹ nhàng]", desc: "Nhẹ nhàng", icon: "🌬️" }
+              ].map((item) => (
                 <button
-                  key={v.id}
-                  onClick={() => setSelectedVoiceId(v.id)}
-                  className={`flex items-center gap-3 p-3 rounded-xl transition-all border group relative overflow-hidden ${
-                    selectedVoiceId === v.id 
-                      ? "bg-nocturne-accent/15 border-nocturne-accent/40 text-nocturne-accent shadow-[0_0_20px_rgba(225,169,95,0.1)]" 
-                      : "bg-white/[0.01] border-transparent text-nocturne-dim hover:bg-white/[0.04] hover:border-white/10"
-                  }`}
+                  key={item.tag}
+                  onClick={() => insertTag(item.tag)}
+                  className="flex flex-col items-center justify-center p-3.5 rounded-2xl border border-black/5 bg-gray-50/50 hover:bg-white hover:border-app-accent hover:shadow-lg transition-all gap-2 group/btn active:scale-95 text-center"
                 >
-                  {selectedVoiceId === v.id && (
-                    <motion.div 
-                      layoutId="active-voice-indicator"
-                      className="absolute left-0 top-0 bottom-0 w-1 bg-nocturne-accent"
-                    />
-                  )}
-                  
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center border shrink-0 transition-all ${
-                    selectedVoiceId === v.id ? "border-nocturne-accent bg-nocturne-accent/10" : "border-white/10 group-hover:border-white/30"
-                  }`}>
-                    <span className="text-[10px] font-bold">{v.region}</span>
-                  </div>
-                  <div className="text-left flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                       <div className="text-[13px] font-bold tracking-tight truncate">{v.name}</div>
-                       <span className={`text-[7px] px-1 py-0.5 rounded border uppercase transition-colors ${
-                         selectedVoiceId === v.id ? 'bg-nocturne-accent/20 border-nocturne-accent/30' : 'bg-white/5 border-white/10 opacity-60'
-                       }`}>{v.region}</span>
-                    </div>
-                    <div className="text-[9px] leading-tight opacity-40 line-clamp-1 italic group-hover:opacity-60 transition-opacity">
-                      {v.description}
-                    </div>
-                  </div>
-                  
-                  {selectedVoiceId === v.id && (
-                    <motion.div 
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-nocturne-accent shadow-[0_0_10px_rgba(225,169,95,0.8)]"
-                    />
-                  )}
+                  <span className="text-xl group-hover/btn:scale-125 transition-transform">{item.icon}</span>
+                  <span className="text-[9px] font-black uppercase text-app-dim group-hover/btn:text-app-accent">{item.desc}</span>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Player Card (Compact) */}
-          <div className={`mt-auto rounded-[28px] overflow-hidden flex flex-col transition-all duration-700 shadow-[0_30px_100px_rgba(0,0,0,0.8)] border relative group/player ${
-            audioUrl ? "bg-nocturne-accent text-black border-nocturne-accent/40" : "bg-white/[0.04] border-white/10 text-nocturne-dim"
+          {/* Voice Settings Card */}
+          <div className="bg-white border border-black/5 rounded-[32px] p-7 space-y-7 shadow-xl relative overflow-hidden transition-all hover:shadow-2xl flex-1">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-100/30 blur-[80px] pointer-events-none" />
+            
+            <div className="flex items-center justify-between relative z-10">
+              <h3 className="text-[12px] uppercase tracking-[2px] text-app-text font-black flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-blue-50 border border-blue-100 shadow-sm">
+                  <Mic2 className="w-5 h-5 text-app-accent" />
+                </div>
+                Cấu hình giọng đọc
+              </h3>
+              <div className="p-1 px-3 bg-blue-50 rounded-full text-[9px] font-black text-app-accent uppercase tracking-tighter">
+                Manual Control
+              </div>
+            </div>
+
+            <div className="space-y-8 relative z-10">
+              <div className="space-y-4">
+                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-[2px] text-app-dim px-1">
+                  <div className="flex items-center gap-2">
+                    <Target className="w-3.5 h-3.5" /> Thống kê giọng
+                  </div>
+                  <span className="text-app-accent">{speed}x / {pitch}pt</span>
+                </div>
+                <div className="space-y-6 bg-gray-50 p-5 rounded-3xl border border-black/5 shadow-inner">
+                  <div className="space-y-2.5">
+                    <div className="flex justify-between text-[9px] font-black uppercase text-app-dim/60">
+                      <span>Tốc độ đọc</span>
+                      <span className={speed > 1 ? "text-app-secondary" : "text-app-accent"}>{speed}x</span>
+                    </div>
+                    <input 
+                      type="range" min="0.5" max="2.0" step="0.1" value={speed} 
+                      onChange={(e) => setSpeed(parseFloat(e.target.value))}
+                      className="w-full h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-app-accent custom-range"
+                    />
+                  </div>
+                  <div className="space-y-2.5">
+                    <div className="flex justify-between text-[9px] font-black uppercase text-app-dim/60">
+                      <span>Tông giọng</span>
+                      <span className={pitch > 0 ? "text-app-secondary" : "text-app-accent"}>{pitch}pt</span>
+                    </div>
+                    <input 
+                      type="range" min="-20" max="20" step="1" value={pitch} 
+                      onChange={(e) => setPitch(parseInt(e.target.value))}
+                      className="w-full h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-app-accent custom-range"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-[2px] text-app-dim px-1">
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-3.5 h-3.5" /> Thư viện nghệ sĩ
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 gap-2 max-h-[320px] overflow-y-auto pr-1 custom-scrollbar scroll-smooth">
+                  {VOICES.map((voice) => (
+                    <button
+                      key={voice.id}
+                      onClick={() => setSelectedVoiceId(voice.id)}
+                      className={`flex items-center p-3.5 rounded-2xl border transition-all gap-4 relative overflow-hidden group/voice ${
+                        selectedVoiceId === voice.id 
+                          ? "bg-app-accent text-white border-app-accent shadow-lg shadow-blue-200" 
+                          : "bg-white border-black/5 text-app-text hover:bg-gray-50 hover:border-app-accent/20"
+                      }`}
+                    >
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-serif text-lg font-black transition-all ${
+                        selectedVoiceId === voice.id ? "bg-white/20 scale-110" : "bg-blue-50 text-app-accent group-hover/voice:bg-app-accent/10"
+                      }`}>
+                        {voice.name[0]}
+                      </div>
+                      <div className="flex-1 text-left">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[12px] font-black uppercase tracking-tight">{voice.name}</span>
+                          <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-tighter ${
+                            selectedVoiceId === voice.id ? "bg-white/20" : "bg-gray-100 text-app-dim"
+                          }`}>{voice.region}</span>
+                        </div>
+                        <p className={`text-[9px] mt-1 font-medium leading-tight ${selectedVoiceId === voice.id ? "text-white/70" : "text-app-dim"}`}>
+                          {voice.description}
+                        </p>
+                      </div>
+                      {selectedVoiceId === voice.id && (
+                        <motion.div layoutId="active-voice" className="absolute left-0 top-0 bottom-0 w-1 bg-white" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Player Card */}
+          <div className={`mt-auto rounded-[32px] overflow-hidden flex flex-col transition-all duration-700 shadow-2xl border relative group/player ${
+            audioUrl ? "bg-app-accent text-white border-app-accent shadow-blue-200" : "bg-white border-black/5 text-app-text"
           }`}>
-            <div className="p-5 md:p-6 flex flex-col items-center gap-5 relative z-10">
+            <div className="p-6 md:p-8 flex flex-col items-center gap-6 relative z-10">
               <div className="w-full flex items-center justify-between">
-                <div className="flex items-center gap-2 text-[10px] uppercase tracking-[2px] font-black">
-                  <div className={`w-2 h-2 rounded-full ${audioUrl ? "bg-black animate-pulse shadow-[0_0_12px_rgba(0,0,0,0.6)]" : "bg-white/30"}`} />
-                  {isGenerating ? "Processing..." : audioUrl ? "Ready" : "Standby"}
+                <div className="flex items-center gap-2.5 text-[10px] uppercase tracking-[2px] font-black">
+                  <div className={`w-2.5 h-2.5 rounded-full ${audioUrl ? "bg-white animate-pulse shadow-lg" : "bg-gray-200"}`} />
+                  {isGenerating ? "Processing AI..." : audioUrl ? "Ready for playback" : "System Standby"}
                 </div>
                 {audioUrl && (
-                  <div className="text-[10px] font-mono font-black opacity-70">
-                    {formatTime(currentTime)} <span className="opacity-40 px-1">/</span> {formatTime(duration)}
+                  <div className="text-[11px] font-mono font-black opacity-80 bg-black/10 px-3 py-1 rounded-lg">
+                    {formatTime(currentTime)} <span className="opacity-40 px-1">|</span> {formatTime(duration)}
                   </div>
                 )}
               </div>
 
               {/* Action & Play Controls Row */}
-              <div className="w-full flex gap-3">
+              <div className="w-full flex gap-4">
                 <button
                   disabled={isGenerating || !transcript.trim()}
                   onClick={handleGenerate}
-                  className={`flex-1 py-4 rounded-2xl font-black tracking-[2px] uppercase text-[11px] transition-all active:scale-[0.98] flex items-center justify-center gap-3 shadow-2xl relative overflow-hidden ${
+                  className={`flex-1 py-4.5 rounded-2xl font-black tracking-[2px] uppercase text-[12px] transition-all active:scale-[0.98] flex items-center justify-center gap-3 shadow-xl relative overflow-hidden ${
                     audioUrl 
-                      ? "bg-black text-nocturne-accent hover:opacity-90 active:bg-zinc-900" 
-                      : "bg-nocturne-accent text-black hover:shadow-nocturne-accent/40 disabled:bg-white/5 disabled:text-white/10 disabled:shadow-none"
+                      ? "bg-white text-app-accent hover:shadow-2xl active:bg-gray-50" 
+                      : "bg-app-accent text-white hover:shadow-blue-300 disabled:bg-gray-100 disabled:text-gray-300 disabled:shadow-none"
                   }`}
                 >
-                  {isGenerating ? (
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                  ) : (
-                    <RefreshCw className={`w-4 h-4 ${audioUrl ? "text-nocturne-accent" : "text-black"}`} />
-                  )}
-                  {audioUrl ? "Tái tạo" : "Chuyển giọng"}
+                  <RefreshCw className={`w-4 h-4 ${isGenerating ? "animate-spin" : ""}`} />
+                  {audioUrl ? "TÁI TẠO LẠI" : "BẮT ĐẦU CHUYỂN GIỌNG"}
                 </button>
 
                 {audioUrl && (
                   <button 
                     onClick={togglePlay}
-                    className="w-14 h-14 rounded-2xl bg-black text-nocturne-accent flex items-center justify-center hover:scale-105 transition-all active:scale-90 shadow-2xl border border-black/20"
+                    className="w-16 h-16 rounded-2xl bg-white text-app-accent flex items-center justify-center hover:scale-105 transition-all active:scale-95 shadow-xl border border-white/20"
                   >
-                    {isPlaying ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current ml-1" />}
+                    {isPlaying ? <Pause className="w-7 h-7 fill-current" /> : <Play className="w-7 h-7 fill-current ml-1" />}
                   </button>
                 )}
               </div>
 
-              {/* Audio Progress & Export Row (Only when ready) */}
+              {/* Audio Progress & Export Row */}
               <AnimatePresence>
                 {audioUrl && (
                   <motion.div 
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: "auto", opacity: 1 }}
-                    className="w-full space-y-3"
+                    className="w-full space-y-5"
                   >
-                    <input 
-                      type="range"
-                      min="0"
-                      max={duration || 0}
-                      step="0.1"
-                      value={currentTime}
-                      onChange={(e) => {
-                        const time = parseFloat(e.target.value);
-                        if (audioRef.current) audioRef.current.currentTime = time;
-                        setCurrentTime(time);
-                      }}
-                      className="w-full h-1 bg-black/20 rounded-full appearance-none cursor-pointer accent-black hover:accent-black/80 transition-all custom-range"
-                    />
+                    <div className="relative pt-2">
+                       <input 
+                        type="range"
+                        min="0"
+                        max={duration || 0}
+                        step="0.1"
+                        value={currentTime}
+                        onChange={(e) => {
+                          const time = parseFloat(e.target.value);
+                          if (audioRef.current) audioRef.current.currentTime = time;
+                          setCurrentTime(time);
+                        }}
+                        className="w-full h-1.5 bg-black/10 rounded-full appearance-none cursor-pointer accent-white hover:accent-gray-100 transition-all"
+                      />
+                    </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <select 
-                        value={downloadFormat}
-                        onChange={(e) => setDownloadFormat(e.target.value as any)}
-                        className="w-full bg-black/10 border border-black/5 rounded-lg px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider text-black focus:outline-none cursor-pointer hover:bg-black/20 transition-all appearance-none"
-                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='rgba(0,0,0,0.4)'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 8px center', backgroundSize: '8px' }}
-                      >
-                        <option value="mp3">MP3</option>
-                        <option value="wav">WAV</option>
-                        <option value="flac">FLAC</option>
-                        <option value="aac">AAC</option>
-                        <option value="ogg">OGG</option>
-                      </select>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="relative group/sel">
+                        <select 
+                          value={downloadFormat}
+                          onChange={(e) => setDownloadFormat(e.target.value as any)}
+                          className="w-full bg-black/10 border border-white/10 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-wider text-white focus:outline-none cursor-pointer hover:bg-black/20 transition-all appearance-none"
+                        >
+                          <option value="mp3">Format: MP3</option>
+                          <option value="wav">Format: WAV</option>
+                          <option value="flac">Format: FLAC</option>
+                          <option value="aac">Format: AAC</option>
+                          <option value="ogg">Format: OGG</option>
+                        </select>
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                          <ChevronRight className="w-3.5 h-3.5 rotate-90 opacity-40" />
+                        </div>
+                      </div>
                       
-                      <div className="flex gap-1">
+                      <div className="flex gap-2">
                         <select 
                           value={downloadBitrate}
                           disabled={downloadFormat !== 'mp3'}
                           onChange={(e) => setDownloadBitrate(parseInt(e.target.value))}
-                          className="flex-1 bg-black/10 border border-black/5 rounded-lg px-2 py-1.5 text-[9px] font-bold uppercase tracking-wider text-black focus:outline-none cursor-pointer hover:bg-black/20 transition-all disabled:opacity-30 appearance-none"
+                          className="flex-1 bg-black/10 border border-white/10 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-wider text-white focus:outline-none cursor-pointer hover:bg-black/20 transition-all disabled:opacity-30 appearance-none text-center"
                         >
-                          <option value="128">128k</option>
-                          <option value="192">192k</option>
-                          <option value="320">320k</option>
+                          <option value="128">128kbps</option>
+                          <option value="192">192kbps</option>
+                          <option value="320">320kbps</option>
                         </select>
                         <button 
                           onClick={() => setIsStereoExport(!isStereoExport)}
-                          className={`w-full rounded-lg border text-[8px] font-bold uppercase transition-all py-1.5 ${isStereoExport ? 'bg-black text-nocturne-accent border-black' : 'bg-black/5 text-black/40 border-black/5'}`}
-                          title={isStereoExport ? "Stereo" : "Mono"}
+                          className={`w-14 rounded-xl border border-white/10 text-[9px] font-black uppercase transition-all ${isStereoExport ? 'bg-white text-app-accent' : 'bg-black/10 text-white'}`}
                         >
-                          {isStereoExport ? "Stereo Mode" : "Mono Mode"}
+                          {isStereoExport ? "STE" : "MON"}
                         </button>
                       </div>
                     </div>
 
                     <button 
                       onClick={handleDownload}
-                      className="w-full py-2.5 rounded-lg bg-black text-nocturne-accent hover:opacity-90 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-md border border-white/10"
+                      className="w-full py-4 rounded-xl bg-white text-app-accent hover:shadow-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-3 border border-white/20"
                     >
-                      <Download className="w-3.5 h-3.5" />
-                      <span className="text-[10px] font-black uppercase tracking-[2px]">Tải về</span>
+                      <Download className="w-4 h-4" />
+                      <span className="text-[11px] font-black uppercase tracking-[3px]">TẢI XUỐNG BẢN THU</span>
                     </button>
                   </motion.div>
                 )}
@@ -1363,47 +1311,45 @@ export default function App() {
         </aside>
       </main>
 
-      <footer className="h-12 px-6 lg:px-10 border-t border-white/5 flex items-center justify-between text-[9px] text-nocturne-dim uppercase tracking-[3px] z-10 bg-nocturne-bg/50 backdrop-blur-sm">
-        <div className="hidden lg:flex gap-10">
-          <span>Độ trễ: 240ms</span>
-          <span>Tần số: 24kHz</span>
-          <span>Định dạng: L16 PCM / MP3</span>
+      <footer className="h-14 px-6 lg:px-10 border-t border-black/5 flex items-center justify-between text-[10px] text-app-dim uppercase tracking-[3px] z-10 bg-white/60 backdrop-blur-md">
+        <div className="hidden lg:flex gap-10 font-black">
+          <span className="flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-blue-500" /> Latency: 180ms</span>
+          <span className="flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-pink-500" /> High-Res: 48kHz</span>
+          <span className="flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-indigo-500" /> AI Engine: v4.1</span>
         </div>
         
-        <div className="flex-1 flex justify-center lg:justify-end gap-6 items-center">
-          <div className="text-[14px] tracking-normal uppercase first-letter:uppercase text-yellow-400">
-            Ứng dụng AI được tạo bởi <a href="https://tranthanhphucbvdkgr.bio.link" target="_blank" rel="noopener noreferrer" className="text-red-500 font-black hover:underline active:text-red-700">Trần Thanh Phúc</a>
+        <div className="flex-1 flex justify-center lg:justify-end gap-8 items-center">
+          <div className="text-[14px] tracking-normal uppercase font-serif text-app-text font-black">
+            MADE WITH ❤️ BY <a href="https://tranthanhphucbvdkgr.bio.link" target="_blank" rel="noopener noreferrer" className="text-app-accent hover:underline decoration-blue-200">TRẦN THANH PHÚC</a>
           </div>
-          <span className="flex items-center gap-1.5 text-nocturne-accent">
-            <div className="w-1.5 h-1.5 rounded-full bg-nocturne-accent animate-pulse" />
-            Trạng thái: Hoạt động
+          <span className="flex items-center gap-2 text-app-accent font-black">
+            <div className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
+            LIVE
           </span>
         </div>
       </footer>
 
-      {/* Unified Notification Toast */}
+      {/* Modern Notification Toast */}
       <AnimatePresence>
         {(error || commandFeedback) && (
           <motion.div 
             key="notification-toast"
-            initial={{ opacity: 0, y: 100, x: "-50%", scale: 0.9 }} 
-            animate={{ opacity: 1, y: 0, x: "-50%", scale: 1 }} 
-            exit={{ opacity: 0, y: 50, x: "-50%", scale: 0.9 }}
-            className="fixed bottom-10 left-1/2 z-[100] px-6 py-4 rounded-2xl border backdrop-blur-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex items-center gap-4 min-w-[340px] max-w-[90vw]"
-            style={{ 
-              backgroundColor: error ? 'rgba(127, 29, 29, 0.95)' : 'rgba(15, 15, 15, 0.95)',
-              borderColor: error ? 'rgba(239, 68, 68, 0.4)' : 'rgba(225, 169, 95, 0.4)'
-            }}
+            initial={{ opacity: 0, y: 50, scale: 0.9 }} 
+            animate={{ opacity: 1, y: 0, scale: 1 }} 
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className={`fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] px-8 py-5 rounded-[24px] shadow-[0_25px_60px_rgba(0,0,0,0.15)] flex items-center gap-6 min-w-[380px] border backdrop-blur-2xl ${
+              error ? 'bg-red-50/95 border-red-100 text-red-900' : 'bg-white/95 border-blue-100 text-app-text'
+            }`}
           >
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${error ? 'bg-red-500/20' : 'bg-nocturne-accent/20'}`}>
-              {error ? <Info className="w-5 h-5 text-red-400" /> : <Sparkles className="w-5 h-5 text-nocturne-accent" />}
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${error ? 'bg-red-100' : 'bg-blue-50'}`}>
+              {error ? <AlertCircle className="w-6 h-6 text-red-600" /> : <Sparkles className="w-6 h-6 text-app-accent" />}
             </div>
             
-            <div className="flex-1 min-w-0 pr-4">
-              <div className={`text-[10px] uppercase tracking-widest font-black mb-1 ${error ? 'text-red-400' : 'text-nocturne-accent'}`}>
-                {error ? 'Lỗi hệ thống' : 'Thông báo'}
+            <div className="flex-1">
+              <div className={`text-[10px] uppercase tracking-widest font-black mb-1 opacity-60`}>
+                {error ? 'Hệ thống báo lỗi' : 'Hệ thống ghi nhận'}
               </div>
-              <div className="text-white text-[13px] font-medium line-clamp-2 leading-tight">
+              <div className="text-[14px] font-bold leading-tight">
                 {error || commandFeedback}
               </div>
             </div>
@@ -1413,9 +1359,9 @@ export default function App() {
                 setError(null);
                 setCommandFeedback(null);
               }}
-              className="p-2.5 hover:bg-white/10 rounded-xl transition-all active:scale-90"
+              className="p-2 hover:bg-black/5 rounded-xl transition-all"
             >
-              <X className="w-4.5 h-4.5 text-white/70" />
+              <X className="w-5 h-5 opacity-40 hover:opacity-100" />
             </button>
           </motion.div>
         )}
