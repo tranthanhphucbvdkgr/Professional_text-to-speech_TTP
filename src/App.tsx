@@ -3,8 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useRef, useEffect } from "react";
-import { GoogleGenAI, Modality } from "@google/genai";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { 
   Play, 
   Pause,
@@ -13,7 +12,6 @@ import {
   BookOpen, 
   Mic2, 
   RefreshCw,
-  Info,
   Trash2,
   FileUp,
   HelpCircle,
@@ -25,134 +23,387 @@ import {
   AlertCircle,
   Layout,
   Target,
-  Layers
+  Layers,
+  CheckCircle2,
+  Sliders,
+  FileText,
+  Volume2,
+  Eye,
+  Edit3,
+  Check,
+  Search,
+  Filter,
+  User,
+  Info
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 import * as lamejs from "lamejs";
 import * as mammoth from "mammoth";
 import * as pdfjsLib from "pdfjs-dist";
-import JSZip from "jszip";
 
-// --- Visual Components ---
-
+// --- Visual Waves Animation Component ---
 const GeneratingWaves = () => (
   <div className="flex items-end justify-center gap-1.5 h-16 w-full">
     {[...Array(15)].map((_, i) => (
       <motion.div
         key={i}
         animate={{
-          height: [10, 50, 15, 40, 10],
+          height: [12, 54, 18, 44, 12],
         }}
         transition={{
-          duration: 1.2,
+          duration: 1.1,
           repeat: Infinity,
-          delay: i * 0.1,
+          delay: i * 0.08,
           ease: "easeInOut"
         }}
-        className={`w-2 rounded-full shadow-lg ${i % 2 === 0 ? 'bg-blue-500' : 'bg-pink-500'}`}
+        className={`w-2 rounded-full shadow-md ${i % 2 === 0 ? 'bg-blue-500' : 'bg-pink-500'}`}
       />
     ))}
   </div>
 );
 
-const SparklingParticles = () => (
-  <div className="absolute inset-0 pointer-events-none overflow-hidden">
-    {[...Array(30)].map((_, i) => (
-      <motion.div
-        key={i}
-        initial={{ 
-          x: Math.random() * 100 + "%", 
-          y: Math.random() * 100 + "%",
-          opacity: 0,
-          scale: 0
-        }}
-        animate={{ 
-          opacity: [0, 0.8, 0],
-          scale: [0, 1.2, 0],
-          y: ["0%", "-50%"]
-        }}
-        transition={{ 
-          duration: 2 + Math.random() * 2,
-          repeat: Infinity,
-          delay: Math.random() * 2
-        }}
-        className={`absolute w-1 h-1 rounded-full blur-[1px] ${i % 2 === 0 ? 'bg-blue-400' : 'bg-pink-400'}`}
-      />
-    ))}
-  </div>
-);
-
-// Fix for pdfjs worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
+// Setup PDF.js worker safely
+try {
+  const version = (pdfjsLib as any).version || '5.6.205';
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${version}/build/pdf.worker.min.mjs`;
+} catch (e) {
+  console.warn("PDF worker initialization warning:", e);
+}
 
 // Types
 type VoiceName = 'Charon' | 'Puck' | 'Kore' | 'Fenrir' | 'Zephyr';
 
-interface VoiceOption {
+export interface VoiceOption {
   id: string;
   baseVoice: VoiceName;
   name: string;
-  description: string;
+  gender: 'Nam' | 'Nữ';
   region: 'Bắc' | 'Trung' | 'Nam';
-  instruction?: string;
+  description: string;
+  instruction: string;
 }
 
-interface VoicePreset {
-  id: string;
-  name: string;
-  voice: VoiceName;
-}
-
-const VOICES: VoiceOption[] = [
+export const VOICES: VoiceOption[] = [
   // Miền Nam
-  { id: 'nam-charon', baseVoice: 'Charon', name: 'Thanh Sang', region: 'Nam', description: 'Giọng nam miền Nam, trầm ấm, truyền cảm, phù hợp kể truyện tự sự', instruction: 'Giọng miền Nam chuẩn, phong thái rành mạch, ấm áp.' },
-  { id: 'nam-kore', baseVoice: 'Kore', name: 'Minh Nguyệt', region: 'Nam', description: 'Giọng nữ miền Nam, ấm áp, nhẹ nhàng, chuyên kể truyện tâm lý', instruction: 'Giọng nữ miền Nam nhẹ nhàng, truyền cảm.' },
-  { id: 'nam-puck', baseVoice: 'Zephyr', name: 'Bé Ba', region: 'Nam', description: 'Giọng nữ miền Nam, trẻ trung, linh hoạt, phù hợp vai trẻ em', instruction: 'Giọng nữ miền Nam trẻ tươi, hồn nhiên.' },
-  { id: 'nam-zephyr', baseVoice: 'Charon', name: 'Ông Năm', region: 'Nam', description: 'Giọng nam miền Nam, điềm tĩnh, giọng ông lão hiền từ', instruction: 'Giọng nam miền Nam, phong cách người già từ tốn.' },
-  { id: 'nam-fenrir', baseVoice: 'Fenrir', name: 'Hùng Dũng', region: 'Nam', description: 'Giọng nam miền Nam, mạnh mẽ, uy lực, phù hợp vai phản diện', instruction: 'Giọng nam miền Nam mạnh mẽ, dứt khoát.' },
-  
+  { 
+    id: 'nam-charon', 
+    baseVoice: 'Charon', 
+    name: 'Thanh Sang', 
+    gender: 'Nam', 
+    region: 'Nam', 
+    description: 'Giọng nam miền Nam, trầm ấm, truyền cảm, phong thái tự sự', 
+    instruction: 'Giọng nam miền Nam chuẩn, phong thái rành mạch, ấm áp, sâu lắng.' 
+  },
+  { 
+    id: 'nam-kore', 
+    baseVoice: 'Kore', 
+    name: 'Minh Nguyệt', 
+    gender: 'Nữ', 
+    region: 'Nam', 
+    description: 'Giọng nữ miền Nam, ngọt ngào, nhẹ nhàng, chuyên kể tâm lý', 
+    instruction: 'Giọng nữ miền Nam nhẹ nhàng, đôn hậu, truyền cảm, tự nhiên.' 
+  },
+  { 
+    id: 'nam-ongnam', 
+    baseVoice: 'Charon', 
+    name: 'Ông Năm', 
+    gender: 'Nam', 
+    region: 'Nam', 
+    description: 'Giọng ông lão Nam Bộ, từ tốn, hiền từ, ấm tình làng nghĩa xóm', 
+    instruction: 'Giọng nam già miền Nam, phong thái ông lão hiền hậu, từ tốn, đầy tình cảm mộc mạc.' 
+  },
+  { 
+    id: 'nam-fenrir', 
+    baseVoice: 'Fenrir', 
+    name: 'Hùng Dũng', 
+    gender: 'Nam', 
+    region: 'Nam', 
+    description: 'Giọng nam miền Nam, mạnh mẽ, uy lực, phù hợp vai kịch tính hoặc phản diện', 
+    instruction: 'Giọng nam miền Nam mạnh mẽ, dứt khoát, uy quyền, hào khí.' 
+  },
+  { 
+    id: 'nam-mientay', 
+    baseVoice: 'Fenrir', 
+    name: 'Gia Bảo', 
+    gender: 'Nam', 
+    region: 'Nam', 
+    description: 'Giọng nam miền Tây, hào sảng, thật thà, chân chất bình dị', 
+    instruction: 'Giọng nam miền Tây hào sảng, chân chất, phóng khoáng, gần gũi.' 
+  },
+  { 
+    id: 'nam-baimai', 
+    baseVoice: 'Zephyr', 
+    name: 'Bé Mai', 
+    gender: 'Nữ', 
+    region: 'Nam', 
+    description: 'Giọng nữ miền Nam trẻ tuổi, tươi tắn, trong trẻo, hồn nhiên', 
+    instruction: 'Giọng nữ miền Nam trẻ trung, nhẹ nhàng, trong sáng, hồn nhiên vui tươi.' 
+  },
+
   // Miền Bắc
-  { id: 'bac-charon', baseVoice: 'Charon', name: 'Duy Mạnh', region: 'Bắc', description: 'Giọng nam miền Bắc, thanh lịch, trang trọng, chuẩn xác', instruction: 'Giọng miền Bắc chuẩn, phong thái trang trọng, rành mạch.' },
-  { id: 'bac-kore', baseVoice: 'Kore', name: 'Ngọc Huyền', region: 'Bắc', description: 'Giọng nữ miền Bắc, Hà Nội gốc, dịu dàng, quý phái', instruction: 'Giọng nữ Hà Nội thanh lịch, dịu dàng.' },
-  { id: 'bac-puck', baseVoice: 'Zephyr', name: 'Thùy Chi', region: 'Bắc', description: 'Giọng nữ miền Bắc trẻ trung, ngọt ngào, trong sáng', instruction: 'Giọng nữ miền Bắc nhẹ nhàng, trong trẻo như sương sớm.' },
+  { 
+    id: 'bac-charon', 
+    baseVoice: 'Charon', 
+    name: 'Duy Mạnh', 
+    gender: 'Nam', 
+    region: 'Bắc', 
+    description: 'Giọng nam miền Bắc, thanh lịch, trang trọng, chuẩn đài truyền hình', 
+    instruction: 'Giọng nam miền Bắc chuẩn Hà Nội, phong thái trang trọng, rành mạch, đĩnh đạc.' 
+  },
+  { 
+    id: 'bac-kore', 
+    baseVoice: 'Kore', 
+    name: 'Ngọc Huyền', 
+    gender: 'Nữ', 
+    region: 'Bắc', 
+    description: 'Giọng nữ miền Bắc, Hà Nội gốc, dịu dàng, quý phái, văn học cổ điển', 
+    instruction: 'Giọng nữ Hà Nội thanh lịch, dịu dàng, trang nhã, ấm áp.' 
+  },
+  { 
+    id: 'bac-zephyr', 
+    baseVoice: 'Zephyr', 
+    name: 'Thùy Chi', 
+    gender: 'Nữ', 
+    region: 'Bắc', 
+    description: 'Giọng nữ miền Bắc trẻ trung, ngọt ngào, trong sáng như sương sớm', 
+    instruction: 'Giọng nữ miền Bắc trẻ trung, nhẹ nhàng, trong trẻo, cuốn hút.' 
+  },
+  { 
+    id: 'bac-puck', 
+    baseVoice: 'Puck', 
+    name: 'Tuấn Khang', 
+    gender: 'Nam', 
+    region: 'Bắc', 
+    description: 'Giọng nam miền Bắc trẻ tuổi, hoạt bát, sôi nổi, giàu năng lượng', 
+    instruction: 'Giọng nam miền Bắc trẻ tuổi, hoạt bát, dứt khoát, sôi nổi.' 
+  },
   
   // Miền Trung
-  { id: 'trung-charon', baseVoice: 'Charon', name: 'Hoàng Bách', region: 'Trung', description: 'Giọng nam miền Trung, mộc mạc, chân chất, gần gũi', instruction: 'Giọng miền Trung mộc mạc, âm sắc đặc trưng địa phương.' },
-  { id: 'trung-kore', baseVoice: 'Kore', name: 'Phương Nam', region: 'Trung', description: 'Giọng nữ miền Trung, sâu lắng, đậm đà, truyền cảm', instruction: 'Giọng nữ miền Trung sâu lắng, đôn hậu.' },
-  { id: 'trung-huế', baseVoice: 'Kore', name: 'Hương Giang', region: 'Trung', description: 'Giọng nữ Huế, dịu dàng, uyển chuyển, thơ mộng', instruction: 'Giọng nữ Huế ngọt ngào, âm điệu uyển chuyển.' },
-  
-  // Miền Tây (Sub-region of Nam)
-  { id: 'nam-miềntây', baseVoice: 'Fenrir', name: 'Gia Bảo', region: 'Nam', description: 'Giọng nam miền Tây, hào sảng, thật thà, chân chất', instruction: 'Giọng nam miền Tây hào sảng, chân chất.' },
+  { 
+    id: 'trung-charon', 
+    baseVoice: 'Charon', 
+    name: 'Hoàng Bách', 
+    gender: 'Nam', 
+    region: 'Trung', 
+    description: 'Giọng nam miền Trung, mộc mạc, chân chất, kiên cường giàu nghị lực', 
+    instruction: 'Giọng nam miền Trung mộc mạc, âm sắc đậm đà địa phương, chân thành.' 
+  },
+  { 
+    id: 'trung-kore', 
+    baseVoice: 'Kore', 
+    name: 'Phương Nam', 
+    gender: 'Nữ', 
+    region: 'Trung', 
+    description: 'Giọng nữ miền Trung, sâu lắng, đậm đà, da diết truyền cảm', 
+    instruction: 'Giọng nữ miền Trung sâu lắng, đôn hậu, da diết, tình cảm.' 
+  },
+  { 
+    id: 'trung-hue', 
+    baseVoice: 'Kore', 
+    name: 'Hương Giang', 
+    gender: 'Nữ', 
+    region: 'Trung', 
+    description: 'Giọng nữ Huế, dịu dàng, uyển chuyển, thơ mộng, dạ thưa ngọt ngào', 
+    instruction: 'Giọng nữ Huế ngọt ngào, âm điệu uyển chuyển, nhẹ nhàng thơ mộng.' 
+  },
 ];
 
-const VALID_TAGS = [
+export const VALID_TAGS = [
   "warm", "whisper", "tension", "joy", "sadness", "anger", "fear", "mystery",
   "formal", "mellow", "breath", "pause", "southern", "shout", "cold", "sarcastic",
-  "romantic", "energetic", "singing", "humming", "melodic", "vocal", "scream", "laugh",
-  "hát", "cười lớn", "cười khúc khích", "quát lớn", "hào hứng", "nhẹ nhàng", "giggle"
+  "romantic", "energetic", "singing", "humming", "melodic", "vocal", "scream", "laugh", "giggle", "gasp",
+  "hát", "cười lớn", "cười khúc khích", "quát lớn", "hào hứng", "nhẹ nhàng", "thở dài", "kêu gào"
 ];
 
-const DEFAULT_TRANSCRIPT = `[joy] Xin chào! Mình là Trần Thanh Phúc, [energetic] đây là một ứng dụng chuyển văn bản thành giọng nói theo phong cách kể chuyện. [shout] Các bạn có thể sử dụng nó một cách thoải mái nhất và giọng đọc sẽ hay nhất theo ý thích của các bạn. [mystery] Nào hãy bắt đầu viết nội dung của các bạn vào đây và thực hiện thôi![joy] `;
+/**
+ * Returns distinct color styling for emotion tags
+ */
+export function getTagColorInfo(rawTag: string) {
+  const clean = rawTag.replace(/[\[\]]/g, '').toLowerCase().trim();
+  
+  // 1. Tươi vui & Hào hứng (Vàng hổ phách)
+  if (['joy', 'hào hứng', 'energetic', 'vocal'].includes(clean)) {
+    return {
+      name: 'Vui tươi',
+      badgeBg: 'bg-amber-100 text-amber-900 border-amber-300',
+      pillBg: 'bg-amber-500 text-white',
+      border: 'border-amber-400',
+      text: 'text-amber-800',
+      icon: '✨',
+      desc: 'Tươi vui, hân hoan, rạng rỡ'
+    };
+  }
+  // 2. Ấm áp & Lãng mạn (Cam ấm)
+  if (['warm', 'romantic', 'mellow'].includes(clean)) {
+    return {
+      name: 'Ấm áp',
+      badgeBg: 'bg-orange-100 text-orange-900 border-orange-300',
+      pillBg: 'bg-orange-500 text-white',
+      border: 'border-orange-400',
+      text: 'text-orange-800',
+      icon: '🔥',
+      desc: 'Ấm áp, tình cảm, êm dịu'
+    };
+  }
+  // 3. Thì thầm & Nhẹ nhàng (Xanh ngọc / Teal)
+  if (['whisper', 'nhẹ nhàng', 'breath', 'thở dài'].includes(clean)) {
+    return {
+      name: 'Thì thầm',
+      badgeBg: 'bg-teal-100 text-teal-900 border-teal-300',
+      pillBg: 'bg-teal-600 text-white',
+      border: 'border-teal-400',
+      text: 'text-teal-800',
+      icon: '🌬️',
+      desc: 'Nhẹ nhàng, từ tốn, thủ thỉ'
+    };
+  }
+  // 4. Kịch tính & Tức giận (Đỏ thắm / Rose)
+  if (['tension', 'quát lớn', 'anger', 'shout', 'scream'].includes(clean)) {
+    return {
+      name: 'Kịch tính',
+      badgeBg: 'bg-rose-100 text-rose-900 border-rose-300',
+      pillBg: 'bg-rose-600 text-white',
+      border: 'border-rose-400',
+      text: 'text-rose-800',
+      icon: '⚡',
+      desc: 'Kịch tính, dồn dập, gay gắt'
+    };
+  }
+  // 5. U sầu & Buồn (Xanh lam / Sky)
+  if (['sadness', 'cold'].includes(clean)) {
+    return {
+      name: 'U sầu',
+      badgeBg: 'bg-sky-100 text-sky-900 border-sky-300',
+      pillBg: 'bg-sky-600 text-white',
+      border: 'border-sky-400',
+      text: 'text-sky-800',
+      icon: '💧',
+      desc: 'Sâu lắng, nghẹn ngào, xúc động'
+    };
+  }
+  // 6. Bí ẩn & Sợ hãi (Tím huyền bí)
+  if (['mystery', 'fear'].includes(clean)) {
+    return {
+      name: 'Bí ẩn',
+      badgeBg: 'bg-purple-100 text-purple-900 border-purple-300',
+      pillBg: 'bg-purple-600 text-white',
+      border: 'border-purple-400',
+      text: 'text-purple-800',
+      icon: '🎭',
+      desc: 'Huyền bí, lôi cuốn, hồi hộp'
+    };
+  }
+  // 7. Âm thanh & Tiếng cười (Hồng sen)
+  if (['cười lớn', 'cười khúc khích', 'laugh', 'giggle', 'hát', 'singing', 'humming', 'melodic'].includes(clean)) {
+    return {
+      name: 'Tiếng cười / Hát',
+      badgeBg: 'bg-pink-100 text-pink-900 border-pink-300',
+      pillBg: 'bg-pink-600 text-white',
+      border: 'border-pink-400',
+      text: 'text-pink-800',
+      icon: '😆',
+      desc: 'Tiếng cười sảng khoái hoặc ngân nga'
+    };
+  }
+
+  // Mặc định
+  return {
+    name: 'Cảm xúc',
+    badgeBg: 'bg-slate-100 text-slate-800 border-slate-300',
+    pillBg: 'bg-slate-600 text-white',
+    border: 'border-slate-400',
+    text: 'text-slate-700',
+    icon: '🏷️',
+    desc: 'Chỉ dẫn cảm xúc chung'
+  };
+}
+
+export const TAG_BUTTONS = [
+  { tag: "[joy]", label: "Vui vẻ", category: "Tươi sáng" },
+  { tag: "[hào hứng]", label: "Hào hứng", category: "Tươi sáng" },
+  { tag: "[warm]", label: "Ấm áp", category: "Ấm áp" },
+  { tag: "[romantic]", label: "Lãng mạn", category: "Ấm áp" },
+  { tag: "[nhẹ nhàng]", label: "Nhẹ nhàng", category: "Thì thầm" },
+  { tag: "[whisper]", label: "Thì thầm", category: "Thì thầm" },
+  { tag: "[thở dài]", label: "Thở dài", category: "Thì thầm" },
+  { tag: "[cười lớn]", label: "Cười lớn", category: "Tiếng cười" },
+  { tag: "[cười khúc khích]", label: "Khúc khích", category: "Tiếng cười" },
+  { tag: "[hát]", label: "Ngân nga", category: "Tiếng cười" },
+  { tag: "[tension]", label: "Kịch tính", category: "Kịch tính" },
+  { tag: "[quát lớn]", label: "Quát lớn", category: "Kịch tính" },
+  { tag: "[anger]", label: "Tức giận", category: "Kịch tính" },
+  { tag: "[mystery]", label: "Bí ẩn", category: "Bí ẩn" },
+  { tag: "[fear]", label: "Sợ hãi", category: "Bí ẩn" },
+  { tag: "[sadness]", label: "U sầu", category: "U sầu" },
+];
+
+const DEFAULT_TRANSCRIPT = `[joy] Xin chào các bạn! Mình là Trần Thanh Phúc. [warm] Chào mừng bạn đến với phòng thu kể chuyện chuyên nghiệp bằng giọng đọc AI. [hào hứng] Bạn có thể tùy chọn giọng nghệ sĩ của cả ba miền Bắc, Trung, Nam với đầy đủ cảm xúc diễn xuất. [mystery] Nào, hãy nhập kịch bản của bạn và cùng trải nghiệm ngay nhé!`;
 
 /**
- * Converts raw PCM data (L16) to a WAV file format.
- * Gemini TTS returns 16-bit PCM at 24000Hz (Mono).
+ * Extracts raw 16-bit PCM audio samples from either raw PCM or a WAV file.
  */
-function convertToWav(audioData: Uint8Array, sampleRate: number = 24000, isStereo: boolean = false): Blob {
+function extractPcmSamples(data: Uint8Array): Int16Array {
+  if (
+    data.length >= 44 &&
+    data[0] === 0x52 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x46 &&
+    data[8] === 0x57 && data[9] === 0x41 && data[10] === 0x56 && data[11] === 0x45
+  ) {
+    let offset = 12;
+    while (offset + 8 <= data.length) {
+      const chunkId = String.fromCharCode(data[offset], data[offset + 1], data[offset + 2], data[offset + 3]);
+      const chunkSize = (data[offset + 4]) | (data[offset + 5] << 8) | (data[offset + 6] << 16) | (data[offset + 7] << 24);
+      offset += 8;
+      if (chunkId === 'data') {
+        const pcmBytes = data.subarray(offset, Math.min(offset + chunkSize, data.length));
+        const numSamples = Math.floor(pcmBytes.length / 2);
+        const view = new DataView(pcmBytes.buffer, pcmBytes.byteOffset, numSamples * 2);
+        const samples = new Int16Array(numSamples);
+        for (let i = 0; i < numSamples; i++) {
+          samples[i] = view.getInt16(i * 2, true);
+        }
+        return samples;
+      }
+      offset += chunkSize;
+    }
+
+    const pcmBytes = data.subarray(44);
+    const numSamples = Math.floor(pcmBytes.length / 2);
+    const view = new DataView(pcmBytes.buffer, pcmBytes.byteOffset, numSamples * 2);
+    const samples = new Int16Array(numSamples);
+    for (let i = 0; i < numSamples; i++) {
+      samples[i] = view.getInt16(i * 2, true);
+    }
+    return samples;
+  }
+
+  const numSamples = Math.floor(data.length / 2);
+  const view = new DataView(data.buffer, data.byteOffset, numSamples * 2);
+  const samples = new Int16Array(numSamples);
+  for (let i = 0; i < numSamples; i++) {
+    samples[i] = view.getInt16(i * 2, true);
+  }
+  return samples;
+}
+
+/**
+ * Builds a clean 44-byte RIFF/WAVE header for PCM samples (Mono or Stereo).
+ */
+function createWavBlob(samples: Int16Array, sampleRate: number = 24000, isStereo: boolean = false): Blob {
   const numChannels = isStereo ? 2 : 1;
   const bitsPerSample = 16;
-  
-  const dataSize = audioData.length;
+  const numSamples = samples.length;
+  const totalSamples = isStereo ? numSamples * 2 : numSamples;
+  const dataSize = totalSamples * (bitsPerSample / 8);
   const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
   const blockAlign = numChannels * (bitsPerSample / 8);
 
   const buffer = new ArrayBuffer(44 + dataSize);
   const view = new DataView(buffer);
 
-  const writeString = (offset: number, string: string) => {
-    for (let i = 0; i < string.length; i++) {
-      view.setUint8(offset + i, string.charCodeAt(i));
+  const writeString = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) {
+      view.setUint8(offset + i, str.charCodeAt(i));
     }
   };
 
@@ -170,64 +421,64 @@ function convertToWav(audioData: Uint8Array, sampleRate: number = 24000, isStere
   writeString(36, 'data');
   view.setUint32(40, dataSize, true);
 
-  const uint8View = new Uint8Array(buffer, 44);
-  uint8View.set(audioData);
+  if (isStereo) {
+    let offset = 44;
+    for (let i = 0; i < numSamples; i++) {
+      view.setInt16(offset, samples[i], true);
+      view.setInt16(offset + 2, samples[i], true);
+      offset += 4;
+    }
+  } else {
+    let offset = 44;
+    for (let i = 0; i < numSamples; i++) {
+      view.setInt16(offset, samples[i], true);
+      offset += 2;
+    }
+  }
 
   return new Blob([buffer], { type: 'audio/wav' });
 }
 
 /**
- * Converts raw PCM data (L16) to an MP3 file format.
+ * Encodes PCM samples to MP3 using lamejs.
  */
-function convertToMp3(audioData: Uint8Array, sampleRate: number = 24000, bitrate: number = 192, isStereo: boolean = false): Blob {
-  const numTotalSamples = Math.floor(audioData.byteLength / 2);
+function createMp3Blob(samples: Int16Array, sampleRate: number = 24000, bitrate: number = 192, isStereo: boolean = false): Blob {
   const numChannels = isStereo ? 2 : 1;
-  const samplesPerChannel = isStereo ? numTotalSamples / 2 : numTotalSamples;
-  
-  const dataView = new DataView(audioData.buffer, audioData.byteOffset, audioData.byteLength);
   const mp3encoder = new (lamejs as any).Mp3Encoder(numChannels, sampleRate, bitrate);
   const mp3Data: any[] = [];
-  const sampleBlockSize = 1152; 
+  const sampleBlockSize = 1152;
 
   if (isStereo) {
-    // Input is interleaved L-R
-    const left = new Int16Array(samplesPerChannel);
-    const right = new Int16Array(samplesPerChannel);
-    
-    for (let i = 0; i < samplesPerChannel; i++) {
-      left[i] = dataView.getInt16(i * 4, true);
-      right[i] = dataView.getInt16(i * 4 + 2, true);
-    }
+    const left = samples;
+    const right = samples;
 
-    for (let i = 0; i < samplesPerChannel; i += sampleBlockSize) {
+    for (let i = 0; i < samples.length; i += sampleBlockSize) {
       const leftChunk = left.subarray(i, i + sampleBlockSize);
       const rightChunk = right.subarray(i, i + sampleBlockSize);
       const mp3buf = mp3encoder.encodeBuffer(leftChunk, rightChunk);
       if (mp3buf.length > 0) mp3Data.push(mp3buf);
     }
   } else {
-    // Input is mono
-    const samples = new Int16Array(samplesPerChannel);
-    for (let i = 0; i < samplesPerChannel; i++) {
-      samples[i] = dataView.getInt16(i * 2, true);
-    }
-
-    for (let i = 0; i < samplesPerChannel; i += sampleBlockSize) {
+    for (let i = 0; i < samples.length; i += sampleBlockSize) {
       const chunk = samples.subarray(i, i + sampleBlockSize);
       const mp3buf = mp3encoder.encodeBuffer(chunk);
       if (mp3buf.length > 0) mp3Data.push(mp3buf);
     }
   }
-  
-  const mp3buf = mp3encoder.flush();
-  if (mp3buf.length > 0) mp3Data.push(mp3buf);
+
+  const flushBuf = mp3encoder.flush();
+  if (flushBuf.length > 0) mp3Data.push(flushBuf);
 
   return new Blob(mp3Data, { type: 'audio/mp3' });
 }
 
 export default function App() {
   const [transcript, setTranscript] = useState(DEFAULT_TRANSCRIPT);
-  const [selectedVoiceId, setSelectedVoiceId] = useState<string>(VOICES[0].id);
+  const [selectedVoiceId, setSelectedVoiceId] = useState<string>(VOICES[1].id); // Minh Nguyệt
+  const [regionFilter, setRegionFilter] = useState<'All' | 'Nam' | 'Bắc' | 'Trung'>('All');
+  const [voiceSearchQuery, setVoiceSearchQuery] = useState<string>("");
+  const [customPersonaInput, setCustomPersonaInput] = useState<string>("");
+  const [showCustomPersonaBox, setShowCustomPersonaBox] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [rawAudioData, setRawAudioData] = useState<Uint8Array | null>(null);
@@ -241,22 +492,91 @@ export default function App() {
   const [isUploading, setIsUploading] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
-  const [downloadFormat, setDownloadFormat] = useState<'wav' | 'mp3' | 'aac' | 'ogg' | 'flac' | 'wma'>('mp3');
+  const [showColorLegend, setShowColorLegend] = useState(false);
+  const [showTagReportModal, setShowTagReportModal] = useState(false);
+  const [editorMode, setEditorMode] = useState<'write' | 'preview'>('write');
+  const [downloadFormat, setDownloadFormat] = useState<'mp3' | 'wav'>('mp3');
   const [downloadBitrate, setDownloadBitrate] = useState<number>(192);
   const [isStereoExport, setIsStereoExport] = useState<boolean>(false);
-  
+
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const aiRef = useRef<GoogleGenAI | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  useEffect(() => {
-    // Initialize AI client lazily
-    if (!aiRef.current && process.env.GEMINI_API_KEY) {
-      aiRef.current = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    }
-  }, []);
+  const [command, setCommand] = useState("");
+  const [commandFeedback, setCommandFeedback] = useState<string | null>(null);
+  const [tagValidationReport, setTagValidationReport] = useState<{
+    unknown: { tag: string; suggestion?: string; index?: number }[];
+    malformed: string[];
+    duplicate: string[];
+  } | null>(null);
 
+  // Selected voice object
+  const selectedVoice = useMemo(() => {
+    return VOICES.find(v => v.id === selectedVoiceId) || VOICES[0];
+  }, [selectedVoiceId]);
+
+  // Filtered voices by region and search term
+  const filteredVoices = useMemo(() => {
+    let list = VOICES;
+    if (regionFilter !== 'All') {
+      list = list.filter(v => v.region === regionFilter);
+    }
+    if (voiceSearchQuery.trim()) {
+      const q = voiceSearchQuery.toLowerCase().trim();
+      list = list.filter(v => 
+        v.name.toLowerCase().includes(q) ||
+        v.description.toLowerCase().includes(q) ||
+        v.region.toLowerCase().includes(q) ||
+        v.gender.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [regionFilter, voiceSearchQuery]);
+
+  // Detected tags in current transcript
+  const activeTagsInScript = useMemo(() => {
+    const matches = Array.from(transcript.matchAll(/\[(.*?)\]/g)) as RegExpExecArray[];
+    return matches.map((m, index) => {
+      const startIndex = typeof m.index === 'number' ? m.index : 0;
+      return {
+        raw: m[0],
+        tag: (m[1] || "").toLowerCase().trim(),
+        index: index,
+        start: startIndex,
+        end: startIndex + m[0].length
+      };
+    });
+  }, [transcript]);
+
+  // Sync audio playback rate with speed slider
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = speed;
+    }
+  }, [speed]);
+
+  // Select voice handler with feedback
+  const handleSelectVoice = (voice: VoiceOption) => {
+    setSelectedVoiceId(voice.id);
+    setCommandFeedback(`Đã chọn: ${voice.name} (${voice.gender} • Miền ${voice.region})`);
+    setTimeout(() => setCommandFeedback(null), 3000);
+  };
+
+  // Apply custom persona
+  const handleApplyCustomPersona = () => {
+    const trimmed = customPersonaInput.trim();
+    if (!trimmed) {
+      setVocalInstruction("");
+      setCommandFeedback("Đã xóa tùy biến phong cách giọng riêng.");
+    } else {
+      setVocalInstruction(trimmed);
+      setCommandFeedback(`Đã thiết lập giọng theo ý muốn: "${trimmed.substring(0, 30)}..."`);
+    }
+    setTimeout(() => setCommandFeedback(null), 3500);
+  };
+
+  // Handle file uploads (txt, pdf, docx)
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -286,44 +606,24 @@ export default function App() {
         }
         text = fullText;
       } else {
-        throw new Error("Định dạng tệp không được hỗ trợ. Vui lòng tải lên .txt, .pdf hoặc .docx");
+        throw new Error("Định dạng tệp không được hỗ trợ. Vui lòng chọn .txt, .pdf hoặc .docx");
       }
 
-      if (text.trim()) {
-        setTranscript(text);
-        setCommandFeedback("Đã tải kịch bản từ tệp");
+      const cleanText = text.trim();
+      if (cleanText) {
+        setTranscript(cleanText);
+        setCommandFeedback(`Đã tải kịch bản thành công từ "${file.name}"`);
       } else {
-        throw new Error("Không thể trích xuất văn bản từ tệp này.");
+        throw new Error("Tệp không chứa nội dung văn bản có thể trích xuất.");
       }
     } catch (err) {
       console.error("File Upload Error:", err);
-      setError(err instanceof Error ? err.message : "Có lỗi xảy ra khi tải tệp.");
+      setError(err instanceof Error ? err.message : "Có lỗi xảy ra khi đọc tệp.");
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
-      setTimeout(() => setCommandFeedback(null), 3000);
+      setTimeout(() => setCommandFeedback(null), 4000);
     }
-  };
-
-  const [command, setCommand] = useState("");
-  const [commandFeedback, setCommandFeedback] = useState<string | null>(null);
-  const [tagValidationReport, setTagValidationReport] = useState<{
-    unknown: { tag: string, suggestion?: string }[],
-    malformed: string[],
-    duplicate: string[]
-  } | null>(null);
-
-  const expandToStereo = (data: Uint8Array): Uint8Array => {
-    const numSamples = data.length / 2;
-    const stereoData = new Uint8Array(data.length * 2);
-    const view = new DataView(data.buffer, data.byteOffset, data.length);
-    const stereoView = new DataView(stereoData.buffer);
-    for (let i = 0; i < numSamples; i++) {
-      const sample = view.getInt16(i * 2, true);
-      stereoView.setInt16(i * 4, sample, true);
-      stereoView.setInt16(i * 4 + 2, sample, true);
-    }
-    return stereoData;
   };
 
   const handleCommand = (e: React.FormEvent) => {
@@ -332,33 +632,55 @@ export default function App() {
     
     if (cmd.startsWith("/voice ")) {
       const voiceNamePart = cmd.replace("/voice ", "").trim();
-      const foundVoice = VOICES.find(v => v.name.toLowerCase().includes(voiceNamePart) || v.id.toLowerCase() === voiceNamePart);
+      const foundVoice = VOICES.find(
+        v => v.name.toLowerCase().includes(voiceNamePart) || v.id.toLowerCase() === voiceNamePart
+      );
       if (foundVoice) {
         setSelectedVoiceId(foundVoice.id);
         setCommandFeedback(`Đã chuyển sang giọng: ${foundVoice.name} (${foundVoice.region})`);
       } else {
-        setCommandFeedback(`Không tìm thấy giọng: ${voiceNamePart}`);
+        setCommandFeedback(`Không tìm thấy giọng: "${voiceNamePart}"`);
       }
     } else if (cmd.startsWith("/set ")) {
       const instruction = command.slice(5).trim();
       setVocalInstruction(instruction);
-      setCommandFeedback(`Đã thiết lập đặc trưng giọng: ${instruction.substring(0, 20)}...`);
+      setCustomPersonaInput(instruction);
+      setCommandFeedback(`Đã thiết lập đặc trưng giọng đọc.`);
+    } else if (cmd.startsWith("/speed ")) {
+      const sp = parseFloat(cmd.replace("/speed ", "").trim());
+      if (!isNaN(sp) && sp >= 0.5 && sp <= 2.0) {
+        setSpeed(sp);
+        setCommandFeedback(`Đã chỉnh tốc độ: ${sp}x`);
+      } else {
+        setCommandFeedback("Tốc độ hợp lệ từ 0.5 đến 2.0");
+      }
+    } else if (cmd.startsWith("/pitch ")) {
+      const pt = parseInt(cmd.replace("/pitch ", "").trim());
+      if (!isNaN(pt) && pt >= -20 && pt <= 20) {
+        setPitch(pt);
+        setCommandFeedback(`Đã chỉnh tông giọng: ${pt}pt`);
+      } else {
+        setCommandFeedback("Tông giọng hợp lệ từ -20 đến 20");
+      }
     } else if (cmd === "/clear") {
       setTranscript("");
-      setCommandFeedback("Đã xóa văn bản");
+      setCommandFeedback("Đã xóa toàn bộ văn bản kịch bản.");
     } else {
-      setCommandFeedback("Lệnh không hợp lệ. Thử /voice [tên_giọng]");
+      setCommandFeedback("Lệnh không hợp lệ. Hỗ trợ: /voice [tên], /set [đặc trưng], /speed [0.5-2.0], /pitch [-20-20], /clear");
     }
     
     setCommand("");
-    setTimeout(() => setCommandFeedback(null), 3000);
+    setTimeout(() => setCommandFeedback(null), 3500);
   };
 
   const insertTag = (tag: string) => {
-    if (!textareaRef.current) return;
+    if (!textareaRef.current) {
+      setTranscript(prev => `${prev} ${tag} `);
+      return;
+    }
     
-    const start = textareaRef.current.selectionStart;
-    const end = textareaRef.current.selectionEnd;
+    const start = textareaRef.current.selectionStart ?? transcript.length;
+    const end = textareaRef.current.selectionEnd ?? transcript.length;
     const text = transcript;
     const before = text.substring(0, start);
     const after = text.substring(end);
@@ -366,134 +688,256 @@ export default function App() {
     const newText = `${before}${tag} ${after}`;
     setTranscript(newText);
     
-    // Reset focus and cursor position after state update
     setTimeout(() => {
       if (textareaRef.current) {
         textareaRef.current.focus();
         const newPos = start + tag.length + 1;
-        requestAnimationFrame(() => {
-          if (textareaRef.current) {
-            textareaRef.current.setSelectionRange(newPos, newPos);
-          }
-        });
+        textareaRef.current.setSelectionRange(newPos, newPos);
       }
-    }, 0);
+    }, 10);
   };
 
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.onplay = () => setIsPlaying(true);
-      audio.onpause = () => setIsPlaying(false);
-      audio.onended = () => {
-        setIsPlaying(false);
-        setCurrentTime(0);
-      };
-      audio.ontimeupdate = () => setCurrentTime(audio.currentTime);
-      audio.onloadedmetadata = () => setDuration(audio.duration);
-    }
-  }, []);
+  const removeTagByIndex = (targetStart: number, targetEnd: number) => {
+    const before = transcript.substring(0, targetStart);
+    const after = transcript.substring(targetEnd);
+    setTranscript((before + after).replace(/\s\s+/g, ' '));
+  };
 
   const togglePlay = () => {
-    if (audioUrl && audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.pause();
-      } else {
-        audioRef.current.play().catch(console.error);
-      }
+    const audio = audioRef.current;
+    if (!audio || !audioUrl) return;
+
+    if (audio.paused) {
+      audio.play().catch((err) => {
+        console.error("Audio playback error:", err);
+        setError("Không thể phát âm thanh. Vui lòng bấm vào màn hình trước.");
+      });
+    } else {
+      audio.pause();
     }
   };
 
   const formatTime = (time: number) => {
+    if (isNaN(time) || !isFinite(time)) return "0:00";
     const mins = Math.floor(time / 60);
     const secs = Math.floor(time % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Levenshtein distance for spelling correction
+  const getLevenshteinDistance = (a: string, b: string): number => {
+    const matrix = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+    for (let j = 1; j <= b.length; j++) matrix[0][j] = j;
+    for (let i = 1; i <= a.length; i++) {
+      for (let j = 1; j <= b.length; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost);
+      }
+    }
+    return matrix[a.length][b.length];
+  };
+
+  const validateTags = () => {
+    const tagRegex = /\[(.*?)\]/g;
+    const matches = Array.from(transcript.matchAll(tagRegex)) as RegExpExecArray[];
+    const report: {
+      unknown: { tag: string; suggestion?: string; index?: number }[];
+      malformed: string[];
+      duplicate: string[];
+    } = { unknown: [], malformed: [], duplicate: [] };
+
+    const seenTags = new Set<string>();
+
+    matches.forEach(match => {
+      const fullTag = match[0];
+      const tagName = (match[1] || "").toLowerCase().trim();
+      
+      if (!VALID_TAGS.includes(tagName)) {
+        let bestMatch = "";
+        let minDistance = 3;
+        
+        VALID_TAGS.forEach(validTag => {
+          const distance = getLevenshteinDistance(tagName, validTag);
+          if (distance < minDistance) {
+            minDistance = distance;
+            bestMatch = validTag;
+          }
+        });
+        
+        report.unknown.push({ 
+          tag: fullTag, 
+          suggestion: bestMatch ? `[${bestMatch}]` : undefined,
+          index: typeof match.index === 'number' ? match.index : undefined
+        });
+      } else {
+        if (seenTags.has(tagName)) {
+          report.duplicate.push(fullTag);
+        }
+        seenTags.add(tagName);
+      }
+    });
+
+    const openIndices: number[] = [];
+    const closedIndices: number[] = [];
+    for (let i = 0; i < transcript.length; i++) {
+      if (transcript[i] === '[') openIndices.push(i);
+      if (transcript[i] === ']') closedIndices.push(i);
+    }
+    
+    if (openIndices.length !== closedIndices.length) {
+      report.malformed.push(`Mất cân bằng cặp ngoặc: ${openIndices.length} dấu mở [, ${closedIndices.length} dấu đóng ].`);
+    }
+
+    setTagValidationReport(report);
+    setShowTagReportModal(true);
+
+    if (report.unknown.length === 0 && report.malformed.length === 0 && report.duplicate.length === 0) {
+      setCommandFeedback("Tất cả thẻ cảm xúc trong kịch bản đều hoàn toàn hợp lệ!");
+    }
+  };
+
+  const fixSingleTag = (oldTag: string, newTag: string) => {
+    setTranscript(prev => prev.replace(oldTag, newTag));
+    setTagValidationReport(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        unknown: prev.unknown.filter(u => u.tag !== oldTag)
+      };
+    });
+    setCommandFeedback(`Đã sửa thẻ ${oldTag} thành ${newTag}`);
+  };
+
+  const autoFixAllTags = () => {
+    if (!tagValidationReport) return;
+    let updated = transcript;
+    tagValidationReport.unknown.forEach(item => {
+      if (item.suggestion) {
+        updated = updated.split(item.tag).join(item.suggestion);
+      }
+    });
+    setTranscript(updated);
+    setTagValidationReport(null);
+    setShowTagReportModal(false);
+    setCommandFeedback("Đã tự động sửa toàn bộ thẻ cảm xúc!");
+  };
+
+  // Web Speech Fallback / Instant Preview (Không tốn hạn mức AI)
+  const [isWebSpeechPlaying, setIsWebSpeechPlaying] = useState(false);
+
+  const handleWebSpeechPreview = () => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      setError("Trình duyệt không hỗ trợ Web Speech API.");
+      return;
+    }
+    if (isWebSpeechPlaying) {
+      window.speechSynthesis.cancel();
+      setIsWebSpeechPlaying(false);
+      setCommandFeedback("Đã dừng đọc thử.");
+      setTimeout(() => setCommandFeedback(null), 2500);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    // Clean all tags and format
+    const cleanText = transcript
+      .replace(/\[(.*?)\]/g, ' ')
+      .replace(/<(.*?)>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!cleanText) {
+      setError("Kịch bản không có nội dung chữ để đọc.");
+      return;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = speed;
+    utterance.pitch = Math.max(0.5, Math.min(2, 1 + pitch * 0.05));
+
+    const voices = window.speechSynthesis.getVoices();
+    const viVoice = voices.find(v => 
+      v.lang.startsWith('vi') || 
+      v.lang.includes('VIE') || 
+      v.name.toLowerCase().includes('vietnam')
+    );
+    if (viVoice) {
+      utterance.voice = viVoice;
+    }
+
+    utterance.onstart = () => setIsWebSpeechPlaying(true);
+    utterance.onend = () => setIsWebSpeechPlaying(false);
+    utterance.onerror = () => setIsWebSpeechPlaying(false);
+
+    window.speechSynthesis.speak(utterance);
+    setCommandFeedback("Đang đọc thử bằng giọng trình duyệt (Web Speech)...");
+    setTimeout(() => setCommandFeedback(null), 3000);
+  };
+
+  // Audio Generation via server-side endpoint
   const handleGenerate = async () => {
     if (!transcript.trim()) {
       setError("Vui lòng nhập kịch bản hoặc tải tài liệu lên trước khi chuyển đổi.");
       return;
     }
 
-    if (!aiRef.current) {
-      setError("AI client not initialized. Check your API key.");
-      return;
-    }
-
     setIsGenerating(true);
     setIsPlaying(false);
+    if (isWebSpeechPlaying) {
+      window.speechSynthesis.cancel();
+      setIsWebSpeechPlaying(false);
+    }
     setError(null);
-    setAudioUrl(null);
-    setRawAudioData(null);
 
     try {
-      const currentVoice = VOICES.find(v => v.id === selectedVoiceId) || VOICES[0];
-      
-      // Build normalized context
-      const regionContext = `Vùng miền: ${currentVoice.region}. ${currentVoice.instruction || ""}`;
-      const speedContext = `Tốc độ nói: ${speed}x (với 1.0 là bình thường, >1.0 là nhanh hơn, <1.0 là chậm hơn). ${speed > 1.2 ? "Hãy nói cực nhanh và dồn dập." : speed < 0.8 ? "Hãy nói thật chậm rãi và thong thả." : ""}`;
-      const pitchContext = `Tông giọng (Pitch): ${pitch} (với 0 là bình thường, dương là cao hơn, âm là trầm hơn). ${pitch > 5 ? "Hãy dùng tông giọng rất cao và thanh thoát." : pitch < -5 ? "Hãy dùng tông giọng rất trầm và sâu lắng." : ""}`;
-      const combinedInstruction = `[instruction] ${regionContext} ${speedContext} ${pitchContext} ${vocalInstruction}`;
-    const systemDirective = "BẠN LÀ MỘT DIỄN VIÊN LỒNG TIẾNG CHUYÊN NGHIỆP CẤP CAO. Bạn phải thực hiện các chỉ dẫn cảm xúc đặt trong ngoặc vuông như [joy], [shout], [laugh], [hát], [cười lớn], [cười khúc khích], [quát lớn], [hào hứng], [nhẹ nhàng]... bằng cách thay đổi tông giọng, tốc độ nói và hơi thở ngay lập tức. TUYỆT ĐỐI KHÔNG ĐƯỢC ĐỌC CÁC TỪ TRONG NGOẶC VUÔNG. CHỈ ĐỌC VĂN BẢN. Bạn phải tuân thủ nghiêm ngặt các chỉ số Tốc độ và Tông giọng được yêu cầu.";
-    const prompt = `HƯỚNG DẪN HỆ THỐNG: ${systemDirective}\n\nTHIẾT LẬP GIỌNG ĐỌC:\n- ${regionContext}\n- ${speedContext}\n- ${pitchContext}\n- ${vocalInstruction}\n\nKỊCH BẢN CẦN THỰC HIỆN (HÃY DIỄN XUẤT THEO CÁC THẺ TRONG NGOẶC):\n${transcript}`;
-
-      const response = await aiRef.current.models.generateContent({
-        model: "gemini-3.1-flash-tts-preview",
-        contents: [{ parts: [{ text: prompt }] }],
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: currentVoice.baseVoice },
-            },
-          },
-        },
+      const response = await fetch('/api/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transcript,
+          voiceName: selectedVoice.baseVoice,
+          region: selectedVoice.region,
+          voiceInstruction: selectedVoice.instruction,
+          vocalInstruction,
+          speed,
+          pitch,
+        }),
       });
 
-      const candidate = response.candidates?.[0];
-      if (candidate?.finishReason && candidate.finishReason !== 'STOP') {
-        console.warn("Gemini Generation interrupted:", candidate.finishReason);
-        if (candidate.finishReason === 'SAFETY') {
-          throw new Error("Nội dung bị chặn do vi phạm chính sách an toàn. Vui lòng thử nội dung khác.");
-        }
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Lỗi khi tạo giọng nói từ hệ thống.');
       }
 
-      const parts = candidate?.content?.parts || [];
-      let base64Audio = "";
-      
-      // Iterate through parts to find the audio data
-      for (const part of parts) {
-        if (part.inlineData?.data) {
-          base64Audio = part.inlineData.data;
-          break;
-        }
-      }
-      
-      if (!base64Audio) {
-        console.error("Gemini Response without audio part:", response);
-        throw new Error("Không nhận được dữ liệu âm thanh từ AI. (Lý do: " + (candidate?.finishReason || "Không xác định") + ")");
+      if (!data.audioBase64) {
+        throw new Error('Không nhận được dữ liệu âm thanh hợp lệ từ máy chủ.');
       }
 
       // Convert base64 to Uint8Array
-      const binaryString = atob(base64Audio);
-      const audioData = new Uint8Array(binaryString.length);
+      const binaryString = atob(data.audioBase64);
+      const audioBytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {
-        audioData[i] = binaryString.charCodeAt(i);
+        audioBytes[i] = binaryString.charCodeAt(i);
       }
 
-      setRawAudioData(audioData);
+      setRawAudioData(audioBytes);
 
-      // Create WAV blob for instant playback
-      const blob = convertToWav(audioData, 24000);
-      const url = URL.createObjectURL(blob);
-      setAudioUrl(url);
+      // Extract PCM samples and build clean WAV blob
+      const pcmSamples = extractPcmSamples(audioBytes);
+      const playableBlob = createWavBlob(pcmSamples, 24000, false);
+
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+      const newUrl = URL.createObjectURL(playableBlob);
+      setAudioUrl(newUrl);
       setIsPlaying(false);
       setCurrentTime(0);
 
     } catch (err) {
       console.error("Generation Error:", err);
-      setError(err instanceof Error ? err.message : "Failed to generate audio.");
+      setError(err instanceof Error ? err.message : "Không thể tạo giọng nói.");
     } finally {
       setIsGenerating(false);
     }
@@ -504,23 +948,24 @@ export default function App() {
     const dd = String(now.getDate()).padStart(2, '0');
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const yyyy = now.getFullYear();
-    return `ttp-${dd}-${mm}-${yyyy}.${ext}`;
+    const hh = String(now.getHours()).padStart(2, '0');
+    const min = String(now.getMinutes()).padStart(2, '0');
+    return `ttp-${dd}-${mm}-${yyyy}_${hh}${min}.${ext}`;
   };
 
   const handleDownload = async () => {
     if (!rawAudioData) return;
     
     try {
+      const pcmSamples = extractPcmSamples(rawAudioData);
       let finalAudioBlob: Blob;
-      let extension = downloadFormat;
-      let filename = getTTPFilename(extension);
-      
-      const speechData = isStereoExport ? expandToStereo(rawAudioData) : rawAudioData;
+      const extension = downloadFormat;
+      const filename = getTTPFilename(extension);
       
       if (downloadFormat === 'mp3') {
-        finalAudioBlob = convertToMp3(speechData, 24000, downloadBitrate, isStereoExport);
+        finalAudioBlob = createMp3Blob(pcmSamples, 24000, downloadBitrate, isStereoExport);
       } else {
-        finalAudioBlob = convertToWav(speechData, 24000, isStereoExport);
+        finalAudioBlob = createWavBlob(pcmSamples, 24000, isStereoExport);
       }
       
       const url = URL.createObjectURL(finalAudioBlob);
@@ -536,127 +981,15 @@ export default function App() {
       }, 1000);
     } catch (err) {
       console.error("Download Error:", err);
-      setError("Không thể xử lý âm thanh để tải về.");
+      setError("Không thể mã hóa và tải xuống bản thu. Vui lòng thử lại.");
     }
   };
 
-  const removeTagAt = (index: number) => {
-    const parts = transcript.split(/(\[.*?\])/);
-    if (index < 0 || index >= parts.length) return;
-    
-    // Save current cursor position
-    const cursor = textareaRef.current?.selectionStart || 0;
-    
-    // Calculate how many characters are before the removed tag to adjust cursor
-    let charsBefore = 0;
-    for (let i = 0; i < index; i++) {
-      charsBefore += parts[i].length;
-    }
-    const tagLength = parts[index].length;
-
-    // Remove the part at the specified index
-    const newParts = [...parts];
-    newParts.splice(index, 1);
-    const newTranscript = newParts.join('');
-    
-    setTranscript(newTranscript);
-
-    // Restore focus and adjust cursor position
-    setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-        const nextCursor = cursor > charsBefore ? Math.max(charsBefore, cursor - tagLength) : cursor;
-        
-        requestAnimationFrame(() => {
-          if (textareaRef.current) {
-            textareaRef.current.setSelectionRange(nextCursor, nextCursor);
-          }
-        });
-      }
-    }, 10);
-  };
-
-  const getLevenshteinDistance = (a: string, b: string): number => {
-    const matrix = Array.from({ length: a.length + 1 }, (_, i) => [i]);
-    for (let j = 1; j <= b.length; j++) matrix[0][j] = j;
-    for (let i = 1; i <= a.length; i++) {
-      for (let j = 1; j <= b.length; j++) {
-        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-        matrix[i][j] = Math.min(matrix[i - 1][j] + 1, matrix[i][j - 1] + 1, matrix[i - 1][j - 1] + cost);
-      }
-    }
-    return matrix[a.length][b.length];
-  };
-
-  const validateTags = () => {
-    const tagRegex = /\[(.*?)\]/g;
-    const matches = Array.from(transcript.matchAll(tagRegex));
-    const report: {
-      unknown: { tag: string, suggestion?: string }[],
-      malformed: string[],
-      duplicate: string[]
-    } = { unknown: [], malformed: [], duplicate: [] };
-
-    const seenTags = new Set<string>();
-
-    matches.forEach(match => {
-      const fullTag = match[0];
-      const tagName = match[1].toLowerCase().trim();
-      
-      if (!VALID_TAGS.includes(tagName)) {
-        // Find suggestion
-        let bestMatch = "";
-        let minDistance = 3; // Max threshold for suggestion
-        
-        VALID_TAGS.forEach(validTag => {
-          const distance = getLevenshteinDistance(tagName, validTag);
-          if (distance < minDistance) {
-            minDistance = distance;
-            bestMatch = validTag;
-          }
-        });
-        
-        report.unknown.push({ 
-          tag: fullTag, 
-          suggestion: bestMatch ? `[${bestMatch}]` : undefined 
-        });
-      } else {
-        if (seenTags.has(tagName)) {
-          report.duplicate.push(fullTag);
-        }
-        seenTags.add(tagName);
-      }
-    });
-
-    // Detailed malformed check
-    const openIndices: number[] = [];
-    const closedIndices: number[] = [];
-    for (let i = 0; i < transcript.length; i++) {
-      if (transcript[i] === '[') openIndices.push(i);
-      if (transcript[i] === ']') closedIndices.push(i);
-    }
-    
-    if (openIndices.length !== closedIndices.length) {
-      report.malformed.push(`Mất cân bằng ngoặc: ${openIndices.length} mở, ${closedIndices.length} đóng.`);
-    }
-
-    if (report.unknown.length === 0 && report.malformed.length === 0 && report.duplicate.length === 0) {
-      setCommandFeedback("Tất cả các thẻ đều hoàn hảo!");
-      setTagValidationReport(null);
-      return;
-    }
-
-    setTagValidationReport(report);
-  };
-
-  const getFontSizeClass = () => {
-    const len = transcript.length;
-    if (len < 100) return "text-3xl md:text-4xl lg:text-5xl";
-    if (len < 300) return "text-2xl md:text-3xl lg:text-4xl";
-    if (len < 600) return "text-xl md:text-2xl lg:text-3xl";
-    if (len < 1000) return "text-lg md:text-xl lg:text-2xl";
-    return "text-base md:text-lg lg:text-xl";
-  };
+  const wordCount = useMemo(() => {
+    const clean = transcript.replace(/\[.*?\]/g, ' ').trim();
+    if (!clean) return 0;
+    return clean.split(/\s+/).length;
+  }, [transcript]);
 
   const COMMAND_PRESETS = [
     { label: "Nam miền Nam ấm áp", cmd: "/set giọng nam miền Nam ấm áp, truyền cảm" },
@@ -664,137 +997,114 @@ export default function App() {
     { label: "Nam miền Bắc trang trọng", cmd: "/set giọng nam miền Bắc rành mạch, trang trọng" },
     { label: "Nữ miền Bắc thanh lịch", cmd: "/set giọng nữ miền Bắc thanh lịch, chuẩn xác" },
     { label: "Nam miền Trung mộc mạc", cmd: "/set giọng nam miền Trung chân chất, mộc mạc" },
-    { label: "Nữ miền Trung sâu lắng", cmd: "/set giọng nữ miền Trung ngọt ngào, sâu lắng" },
-    { label: "Nam trẻ trung sôi nổi", cmd: "/set giọng nam trẻ trung, năng động, sôi nổi" },
-    { label: "Nữ uy lực quyết đoán", cmd: "/set giọng nữ trưởng thành, uy lực, quyết đoán" },
+    { label: "Nữ Huế dịu dàng thơ mộng", cmd: "/set giọng nữ Huế ngọt ngào, dạ thưa tha thiết" },
     { label: "Ông lão miền Tây từ tốn", cmd: "/set giọng ông lão miền Tây từ tốn, hiền hậu" },
-    { label: "Bà lão miền Bắc cổ tích", cmd: "/set giọng bà lão miền Bắc kể chuyện cổ tích" },
+  ];
+
+  const CUSTOM_PERSONA_SUGGESTIONS = [
+    "Giọng mẹ hiền kể chuyện cổ tích cho con ngủ",
+    "Giọng phát thanh viên thời sự VTV trang trọng",
+    "Giọng kể chuyện đêm khuya ma mị, rùng rợn",
+    "Giọng MC du lịch vui tươi, hoạt bát",
+    "Giọng đọc sách phát triển bản thân trầm ấm"
   ];
 
   return (
-    <div className="min-h-screen bg-app-bg text-app-text font-sans relative overflow-hidden flex flex-col selection:bg-app-accent/20">
-      {/* Dynamic Background */}
-      <div className="fixed inset-0 z-0">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans relative overflow-hidden flex flex-col selection:bg-blue-500/20">
+      {/* Background Ambience */}
+      <div className="fixed inset-0 z-0 pointer-events-none">
         <div className="absolute inset-0 bg-white" />
-        <motion.div 
-          animate={{ 
-            opacity: [0.1, 0.2, 0.1],
-            scale: [1, 1.1, 1]
-          }}
-          transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute -top-[20%] -right-[10%] w-[60%] h-[60%] rounded-full bg-blue-200/40 blur-[120px]" 
-        />
-        <motion.div 
-          animate={{ 
-            opacity: [0.1, 0.15, 0.1],
-            scale: [1, 1.2, 1]
-          }}
-          transition={{ duration: 20, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-          className="absolute -bottom-[20%] -left-[10%] w-[50%] h-[50%] rounded-full bg-pink-200/30 blur-[100px]" 
-        />
-        <div className="absolute inset-0 opacity-[0.4] pointer-events-none bg-[url('https://grainy-gradients.vercel.app/noise.svg')]" />
-        
-        {/* Colorful Particles */}
-        <div className="absolute inset-0">
-          {[...Array(15)].map((_, i) => (
-            <motion.div
-              key={i}
-              initial={{ 
-                x: Math.random() * 100 + "%", 
-                y: Math.random() * 100 + "%",
-                opacity: 0.1
-              }}
-              animate={{ 
-                y: ["0%", "-10%", "0%"],
-                x: ["0%", "5%", "0%"],
-                opacity: [0.1, 0.3, 0.1],
-              }}
-              transition={{ 
-                duration: 15 + Math.random() * 10, 
-                repeat: Infinity, 
-                ease: "linear",
-                delay: Math.random() * 10
-              }}
-              className={`absolute w-4 h-4 rounded-full blur-[2px] ${i % 3 === 0 ? 'bg-blue-400/20' : i % 3 === 1 ? 'bg-pink-400/20' : 'bg-indigo-400/20'}`}
-            />
-          ))}
-        </div>
+        <div className="absolute -top-[15%] -right-[10%] w-[50%] h-[50%] rounded-full bg-blue-100/60 blur-[100px]" />
+        <div className="absolute -bottom-[15%] -left-[10%] w-[50%] h-[50%] rounded-full bg-pink-100/50 blur-[100px]" />
+        <div className="absolute inset-0 opacity-[0.25] bg-[radial-gradient(#3B82F6_1px,transparent_1px)] [background-size:20px_20px]" />
       </div>
 
-      <header className="h-20 lg:h-24 px-6 lg:px-10 border-b border-app-accent/5 flex items-center justify-between z-20 relative bg-white/40 backdrop-blur-md">
-        <div className="flex items-center gap-6">
-          <motion.div 
-            whileHover={{ scale: 1.05, rotate: 2 }}
-            className="w-14 h-14 md:w-16 md:h-16 rounded-[22px] bg-white shadow-[0_8px_30px_rgb(0,0,0,0.08)] border border-app-accent/10 flex items-center justify-center relative overflow-hidden"
-          >
-            <div className="absolute inset-0 bg-gradient-to-tr from-app-accent/10 to-app-secondary/10" />
-            <div className="relative">
-              <BookOpen className="w-8 h-8 text-app-accent absolute -translate-x-1/2 -translate-y-1/2 left-1/2 top-1/2 opacity-20 blur-[1px]" />
-              <Mic2 className="w-9 h-9 text-app-accent relative z-10" />
-              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-app-secondary rounded-full border-2 border-white animate-pulse shadow-md" />
+      {/* Header */}
+      <header className="h-20 px-6 lg:px-10 border-b border-slate-200/80 flex items-center justify-between z-20 relative bg-white/80 backdrop-blur-md shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 shadow-md flex items-center justify-center text-white relative">
+            <Mic2 className="w-6 h-6" />
+            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white animate-pulse" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-[2px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md font-extrabold border border-blue-200/60">Studio 4.0</span>
+              <span className="text-xs text-slate-400 font-medium hidden sm:inline">|</span>
+              <span className="text-xs text-slate-500 font-semibold hidden sm:inline">Gemini 3.8 Flash TTS</span>
             </div>
-          </motion.div>
-          <div className="space-y-1">
-            <h1 className="text-[10px] uppercase tracking-[4px] text-app-accent font-black">AI Voice Professional</h1>
-            <h2 className="text-xl md:text-2xl font-serif font-black text-app-text tracking-tight uppercase">Văn bản thành giọng kể chuyện</h2>
+            <h1 className="text-lg md:text-xl font-bold text-slate-900 tracking-tight">Chuyển Văn Bản Thành Giọng Kể Chuyện</h1>
           </div>
         </div>
         
-        <div className="hidden md:flex items-center gap-3 bg-white shadow-[0_4px_20px_rgba(0,0,0,0.05)] px-5 py-2.5 rounded-full border border-app-accent/5">
-          <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-          <span className="text-[10px] uppercase tracking-[2px] text-app-accent font-black">Hệ thống sẵn sàng</span>
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-1.5 rounded-full text-xs font-semibold">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+            <span>Chỉ đọc lời thoại kịch bản</span>
+          </div>
         </div>
       </header>
 
-      <main className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-8 p-4 lg:p-8 z-10 max-w-[1700px] mx-auto w-full overflow-hidden">
-        {/* Narrative Viewport */}
-        <motion.section 
-          animate={{ 
-            borderColor: isPlaying ? "rgba(59, 130, 246, 0.4)" : "rgba(0, 0, 0, 0.05)",
-            boxShadow: isPlaying ? "0 20px 40px rgba(59, 130, 246, 0.1)" : "0 10px 40px rgba(0,0,0,0.04)"
-          }}
-          className="bg-white/80 border border-black/5 rounded-[32px] p-8 md:p-10 flex flex-col backdrop-blur-xl overflow-hidden min-h-[500px] shadow-xl relative"
-        >
-          {/* Overlay for generating */}
+      {/* Main Layout */}
+      <main className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_450px] gap-6 p-4 lg:p-8 z-10 max-w-[1720px] mx-auto w-full">
+        {/* LEFT COLUMN: Narrative Viewport / Script Editor */}
+        <section className="bg-white border border-slate-200 rounded-3xl p-6 md:p-7 flex flex-col shadow-sm relative overflow-hidden">
+          {/* Generating Overlay */}
           <AnimatePresence>
             {isGenerating && (
               <motion.div 
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="absolute inset-0 z-50 bg-white/60 backdrop-blur-sm flex flex-col items-center justify-center p-12 text-center"
+                className="absolute inset-0 z-50 bg-white/90 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center"
               >
-                <SparklingParticles />
-                <div className="bg-white p-10 rounded-[40px] shadow-[0_20px_60px_rgba(0,0,0,0.1)] border border-blue-100 flex flex-col items-center gap-8 relative overflow-hidden">
-                  <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-blue-400 via-pink-400 to-blue-400 animate-pulse" />
+                <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-200 flex flex-col items-center gap-5 max-w-sm w-full">
+                  <div className="w-full h-1 bg-gradient-to-r from-blue-500 via-pink-500 to-blue-500 rounded-full animate-pulse" />
                   <GeneratingWaves />
-                  <div className="space-y-3">
-                    <h3 className="text-2xl font-serif font-black text-app-text">Đang tạo giọng nói AI...</h3>
-                    <p className="text-app-dim text-sm max-w-xs mx-auto">Vui lòng chờ trong giây lát, trí tuệ nhân tạo đang thổi hồn vào câu chuyện của bạn.</p>
+                  <div className="space-y-1.5">
+                    <h3 className="text-lg font-bold text-slate-900">Đang diễn hoạt giọng đọc AI...</h3>
+                    <p className="text-slate-500 text-xs">Mô hình đang tổng hợp lời thoại và cảm xúc kịch bản theo đúng thiết lập.</p>
                   </div>
-                  <motion.div 
-                    animate={{ rotate: 360 }}
-                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                    className="p-3 rounded-full bg-blue-50"
-                  >
-                    <RefreshCw className="w-6 h-6 text-blue-500" />
-                  </motion.div>
+                  <div className="flex items-center gap-2 text-blue-600 text-xs font-bold bg-blue-50 px-3 py-1.5 rounded-full">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Vui lòng đợi vài giây</span>
+                  </div>
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
-          <div className="flex items-center justify-between mb-8 pb-4 border-b border-black/5 relative">
-            <div className="absolute -bottom-px left-0 w-24 h-px bg-gradient-to-r from-app-accent to-transparent" />
-            <div className="flex items-center gap-5 bg-black/[0.02] border border-black/5 px-5 py-2.5 rounded-2xl relative z-10 transition-all hover:bg-black/[0.04]">
-              <div className="font-serif font-black text-2xl tracking-[1px] text-app-accent select-none uppercase">
-                CONTENT
-              </div>
-              <span className="font-serif text-[10px] uppercase tracking-[2px] text-app-accent font-black mt-0.5 border-l border-black/10 pl-4">
-                 {isGenerating ? "Đang xử lý" : "Kịch bản"}
+
+          {/* Editor Header Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-4 mb-4 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <span className="text-xs uppercase tracking-wider font-extrabold text-blue-600 bg-blue-50 px-3 py-1 rounded-xl border border-blue-100 flex items-center gap-1.5">
+                <FileText className="w-3.5 h-3.5" />
+                Ô Kịch Bản
               </span>
-              
-              <div className="h-6 w-[1px] bg-black/5 mx-2" />
-              
+
+              {/* View Switcher: Write vs Storyboard */}
+              <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs font-semibold">
+                <button
+                  onClick={() => setEditorMode('write')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-all ${
+                    editorMode === 'write' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Soạn thảo</span>
+                </button>
+                <button
+                  onClick={() => setEditorMode('preview')}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg transition-all ${
+                    editorMode === 'preview' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>Xem kịch bản có màu</span>
+                </button>
+              </div>
+
+              <div className="h-4 w-px bg-slate-200 hidden sm:block" />
+
               <input 
                 type="file" 
                 ref={fileInputRef}
@@ -802,556 +1112,849 @@ export default function App() {
                 accept=".txt,.pdf,.docx"
                 className="hidden"
               />
-              
-              <motion.button
-                whileHover={{ scale: 1.05, backgroundColor: "#3B82F6", color: "#FFFFFF" }}
-                whileTap={{ scale: 0.95 }}
+              <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading}
-                className="flex items-center gap-2.5 px-5 py-2 rounded-xl bg-app-accent/5 border border-app-accent/10 text-app-accent transition-all group shadow-sm font-black"
+                className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all text-xs font-bold"
+                title="Tải tệp .txt, .pdf, .docx vào kịch bản"
               >
-                {isUploading ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-app-accent" />
-                ) : (
-                  <FileUp className="w-4 h-4 group-hover:-translate-y-0.5 transition-transform" />
-                )}
-                <span className="text-[10px] uppercase tracking-[1px] font-serif">TẢI TÀI LIỆU</span>
-              </motion.button>
+                {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileUp className="w-3.5 h-3.5" />}
+                <span>Tải tệp</span>
+              </button>
+
+              <button
+                onClick={() => setTranscript("")}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl hover:bg-red-50 text-slate-400 hover:text-red-600 transition-all text-xs font-semibold"
+                title="Xóa sạch văn bản"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Xóa</span>
+              </button>
             </div>
-            <div className="text-[10px] text-app-accent/60 font-mono tracking-widest font-black bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">
-              #{transcript.length.toString().padStart(4, '0')}
+
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-slate-500 font-medium">
+                {wordCount} từ <span className="text-slate-300">|</span> {transcript.length} ký tự
+              </span>
             </div>
           </div>
-          
-          <div className="relative flex-1 group overflow-hidden">
-            {/* Syntax Highlighting Overlay */}
-            <div 
-              aria-hidden="true"
-              className={`absolute inset-0 z-20 pointer-events-none whitespace-pre-wrap break-words font-serif leading-relaxed p-0 selection:bg-transparent overflow-y-auto custom-scrollbar ${getFontSizeClass()}`}
-              style={{ padding: '0px' }}
-              ref={(el) => {
-                if (el && textareaRef.current) {
-                  el.scrollTop = textareaRef.current.scrollTop;
-                }
-              }}
-            >
-              {transcript.split(/(\[.*?\])/).map((part, i) => {
-                if (part.startsWith('[') && part.endsWith(']')) {
+
+          {/* COLOR-CODED QUICK EMOTION TAG PALETTE */}
+          <div className="mb-4 bg-slate-50/90 p-3.5 rounded-2xl border border-slate-200/90 space-y-2.5">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+              <span className="flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                Thẻ cảm xúc được tô màu phân biệt theo nhóm:
+              </span>
+              <button
+                onClick={() => setShowColorLegend(!showColorLegend)}
+                className="text-[11px] text-blue-600 hover:underline flex items-center gap-1 font-semibold"
+              >
+                <Info className="w-3 h-3" />
+                <span>{showColorLegend ? "Ẩn chú giải" : "Xem ý nghĩa màu"}</span>
+              </button>
+            </div>
+
+            {/* Optional Color Legend */}
+            <AnimatePresence>
+              {showColorLegend && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 pb-2 text-[10px] border-b border-slate-200"
+                >
+                  <div className="flex items-center gap-1.5 p-1.5 bg-amber-50 rounded-lg border border-amber-200 text-amber-900 font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                    <span>Vàng: Vui tươi, hào hứng</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 p-1.5 bg-orange-50 rounded-lg border border-orange-200 text-orange-900 font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-full bg-orange-500" />
+                    <span>Cam: Ấm áp, lãng mạn</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 p-1.5 bg-teal-50 rounded-lg border border-teal-200 text-teal-900 font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-full bg-teal-500" />
+                    <span>Xanh ngọc: Thì thầm, nhẹ nhàng</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 p-1.5 bg-rose-50 rounded-lg border border-rose-200 text-rose-900 font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                    <span>Đỏ hồng: Kịch tính, quát lớn</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 p-1.5 bg-pink-50 rounded-lg border border-pink-200 text-pink-900 font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-full bg-pink-500" />
+                    <span>Hồng sen: Cười lớn, ngân nga</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 p-1.5 bg-purple-50 rounded-lg border border-purple-200 text-purple-900 font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-full bg-purple-500" />
+                    <span>Tím: Bí ẩn, sợ hãi</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 p-1.5 bg-sky-50 rounded-lg border border-sky-200 text-sky-900 font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-full bg-sky-500" />
+                    <span>Xanh lam: U sầu, buồn</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Quick Insert Buttons with Distinct Color Badges */}
+            <div className="flex flex-wrap gap-1.5">
+              {TAG_BUTTONS.map((item) => {
+                const color = getTagColorInfo(item.tag);
+                return (
+                  <button
+                    key={item.tag}
+                    onClick={() => insertTag(item.tag)}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold shadow-xs transition-all active:scale-95 hover:shadow-sm ${color.badgeBg}`}
+                    title={`Chèn thẻ ${item.tag} (${color.desc})`}
+                  >
+                    <span>{color.icon}</span>
+                    <span>{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Main Script Textarea / Preview Container */}
+          <div className="relative flex-1 min-h-[340px] flex flex-col">
+            {editorMode === 'write' ? (
+              <textarea
+                ref={textareaRef}
+                value={transcript}
+                onChange={(e) => setTranscript(e.target.value)}
+                spellCheck="false"
+                autoComplete="off"
+                placeholder="Nhập kịch bản hoặc lời thoại của bạn tại đây... Hãy chèn các thẻ cảm xúc như [joy], [warm], [whisper] để tạo sắc thái sống động!"
+                className="w-full flex-1 p-4 bg-slate-50/50 hover:bg-slate-50/80 focus:bg-white border border-slate-200 focus:border-blue-500 rounded-2xl text-slate-900 font-sans text-base leading-relaxed focus:outline-none focus:ring-4 focus:ring-blue-100 transition-all placeholder:text-slate-400 resize-none shadow-inner"
+              />
+            ) : (
+              /* Storyboard / Preview Mode: Shows tags as beautiful distinct color-coded badges */
+              <div className="w-full flex-1 p-5 bg-slate-50/60 border border-slate-200 rounded-2xl overflow-y-auto text-slate-800 text-base leading-loose font-sans">
+                {transcript.split(/(\[.*?\])/).map((part, i) => {
+                  if (part.startsWith('[') && part.endsWith(']')) {
+                    const color = getTagColorInfo(part);
+                    return (
+                      <span 
+                        key={i}
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 mx-1 rounded-md text-xs font-bold border shadow-xs ${color.badgeBg}`}
+                      >
+                        <span>{color.icon}</span>
+                        <span>{part}</span>
+                      </span>
+                    );
+                  }
+                  return <span key={i}>{part}</span>;
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Active Detected Tags Strip with Vibrant Colors */}
+          <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                <Layout className="w-3.5 h-3.5 text-blue-500" />
+                Thẻ trong bài ({activeTagsInScript.length}):
+              </span>
+              {activeTagsInScript.length === 0 ? (
+                <span className="text-xs text-slate-400 italic">Chưa có thẻ nào trong kịch bản.</span>
+              ) : (
+                activeTagsInScript.map((t, idx) => {
+                  const color = getTagColorInfo(t.raw);
                   return (
                     <span 
-                      key={i} 
-                      className="inline-flex items-center text-app-secondary font-black rounded-lg bg-pink-50 border border-pink-100 px-1 py-0.5 pointer-events-auto group/tag cursor-default relative z-30 shadow-sm"
+                      key={idx}
+                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 border text-xs font-bold rounded-md shadow-xs ${color.badgeBg}`}
                     >
-                      {part}
+                      <span>{color.icon}</span>
+                      <span>{t.raw}</span>
                       <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          e.preventDefault();
-                          removeTagAt(i);
-                        }}
-                        className="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover/tag:opacity-100 bg-app-secondary text-white rounded-full p-1 transition-all pointer-events-auto scale-75 hover:scale-100 shadow-md z-40"
-                        title="Xóa thẻ"
+                        onClick={() => removeTagByIndex(t.start, t.end)}
+                        className="opacity-60 hover:opacity-100 hover:text-red-700 transition-opacity ml-0.5"
+                        title="Xóa thẻ này"
                       >
-                        <X className="w-3 h-3 text-white" />
+                        <X className="w-3 h-3" />
                       </button>
                     </span>
                   );
-                }
-                return <span key={i} className="text-app-text">{part}</span>;
-              })}
-              {transcript.endsWith('\n') && <br />}
+                })
+              )}
             </div>
 
-            <motion.textarea
-              ref={textareaRef}
-              value={transcript}
-              onChange={(e) => setTranscript(e.target.value)}
-              spellCheck="false"
-              autoComplete="off"
-              onScroll={(e) => {
-                const overlay = e.currentTarget.previousElementSibling;
-                if (overlay) overlay.scrollTop = e.currentTarget.scrollTop;
-              }}
-              placeholder="Nhập kịch bản của bạn tại đây..."
-              className={`w-full h-full bg-transparent border-none p-0 font-serif leading-relaxed text-transparent caret-app-accent focus:outline-none transition-all placeholder:text-gray-300 resize-none selection:bg-app-accent/20 custom-scrollbar overflow-y-auto relative z-10 ${getFontSizeClass()}`}
-              style={{ 
-                textShadow: "none", 
-                color: "transparent",
-                WebkitTextFillColor: "transparent",
-                outline: "none",
-                boxShadow: "none"
-              }}
-            />
+            <button
+              onClick={validateTags}
+              className="inline-flex items-center gap-1.5 px-3 py-1 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs transition-all"
+              title="Kiểm tra tính hợp lệ của tất cả thẻ trong bài"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+              <span>Kiểm tra lỗi thẻ</span>
+            </button>
           </div>
 
+          {/* Vocal Instruction Bar */}
           <AnimatePresence>
             {vocalInstruction && (
               <motion.div 
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
-                className="mt-6 p-4 bg-blue-50/50 rounded-2xl border border-blue-100 flex items-center justify-between shadow-sm"
+                className="mt-3 p-3 bg-blue-50/90 rounded-xl border border-blue-200 flex items-center justify-between shadow-xs"
               >
-                <div className="flex items-center gap-3 overflow-hidden">
-                  <div className="p-2 bg-white rounded-xl shadow-sm">
-                    <Mic2 className="w-4 h-4 text-app-accent flex-shrink-0" />
-                  </div>
-                  <span className="text-[11px] uppercase tracking-wider text-app-accent font-black truncate">
-                    Đặc trưng: {vocalInstruction}
+                <div className="flex items-center gap-2 overflow-hidden text-xs">
+                  <Mic2 className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                  <span className="font-bold text-blue-900 truncate">
+                    Đặc trưng giọng riêng: {vocalInstruction}
                   </span>
                 </div>
                 <button 
-                  onClick={() => setVocalInstruction("")}
-                  className="p-2 hover:bg-white rounded-xl transition-all text-app-dim hover:text-red-500"
+                  onClick={() => {
+                    setVocalInstruction("");
+                    setCustomPersonaInput("");
+                  }}
+                  className="p-1 text-slate-400 hover:text-red-500 transition-all rounded-md"
+                  title="Xóa đặc trưng này"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <X className="w-4 h-4" />
                 </button>
               </motion.div>
             )}
           </AnimatePresence>
-          
-          {/* Command Bar */}
-          <div className="mt-8 pt-6 border-t border-black/5">
-            <div className="flex items-center justify-between mb-3 px-1">
-              <div className="flex items-center gap-2.5">
-                <div className="p-1.5 bg-blue-50 rounded-lg">
-                  <Zap className="w-3 h-3 text-app-accent" />
-                </div>
-                <span className="text-[10px] uppercase tracking-[2px] text-app-dim font-black">Lệnh nhanh</span>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <motion.button 
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => {
-                      setShowPresets(!showPresets);
-                      setShowHelp(false);
-                    }}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all shadow-sm ${showPresets ? 'bg-app-accent text-white font-black' : 'text-app-accent hover:bg-app-accent/5 bg-white border border-app-accent/10'}`}
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span className="text-[9px] uppercase tracking-wider font-black">Thư viện mẫu</span>
-                  </motion.button>
-                  
-                  <AnimatePresence>
-                    {showPresets && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 10 }}
-                        className="absolute bottom-full right-0 mb-3 w-64 bg-white border border-black/5 rounded-2xl p-2 shadow-[0_20px_50px_rgba(0,0,0,0.15)] backdrop-blur-xl z-50 overflow-hidden"
-                      >
-                        <div className="text-[9px] uppercase tracking-widest font-black text-app-dim mb-2 px-3 py-2 border-b border-black/5">Chọn kịch bản mẫu</div>
-                        <div className="grid grid-cols-1 gap-1 max-h-[300px] overflow-y-auto custom-scrollbar p-1">
-                          {COMMAND_PRESETS.map((preset, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => {
-                                setCommand(preset.cmd);
-                                setShowPresets(false);
-                              }}
-                              className="flex items-center justify-between text-left px-3 py-3 rounded-xl hover:bg-blue-50 group transition-all"
-                            >
-                              <span className="text-[11px] font-medium text-app-text group-hover:text-app-accent transition-colors">{preset.label}</span>
-                              <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-app-accent" />
-                            </button>
-                          ))}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
 
-                <div className="relative ml-1">
-                  <button 
-                    onMouseEnter={() => setShowHelp(true)}
-                    onMouseLeave={() => setShowHelp(false)}
-                    onClick={() => {
-                      setShowHelp(!showHelp);
-                      setShowPresets(false);
-                    }}
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-app-dim hover:text-app-accent hover:bg-white shadow-sm border border-transparent hover:border-black/5 transition-all"
-                  >
-                    <HelpCircle className="w-4 h-4" />
-                  </button>
-                  
-                  <AnimatePresence>
-                    {showHelp && (
-                      <motion.div
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        className="absolute bottom-full right-0 mb-3 w-64 bg-white border border-black/5 rounded-2xl p-5 shadow-2xl backdrop-blur-xl z-50 pointer-events-none"
-                      >
-                        <h4 className="text-app-accent text-[11px] uppercase tracking-widest font-black mb-4 border-b border-black/5 pb-2">Hướng dẫn lệnh</h4>
-                        <div className="space-y-4">
-                          <div className="bg-blue-50/50 p-2 rounded-xl">
-                            <code className="text-app-accent text-[10px] font-black">/voice [tên]</code>
-                            <p className="text-app-dim text-[10px] mt-1 font-medium">Thay đổi giọng đọc nhanh</p>
-                          </div>
-                          <div className="bg-pink-50/50 p-2 rounded-xl">
-                            <code className="text-app-secondary text-[10px] font-black">/set [mô tả]</code>
-                            <p className="text-app-dim text-[10px] mt-1 font-medium">Gán đặc tính cảm xúc</p>
-                          </div>
-                          <div className="bg-gray-50 p-2 rounded-xl">
-                            <code className="text-app-text text-[10px] font-black">/clear</code>
-                            <p className="text-app-dim text-[10px] mt-1 font-medium">Làm sạch kịch bản</p>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              </div>
-            </div>
-
-            <form onSubmit={handleCommand} className="relative group/input">
-              <div className="absolute left-5 top-1/2 -translate-y-1/2 text-app-accent font-black text-sm select-none transition-transform group-focus-within/input:scale-110">
-                {">"}
+          {/* Quick Command Form */}
+          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-3">
+            <form onSubmit={handleCommand} className="flex-1 relative">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-500 font-bold text-xs select-none">
+                /
               </div>
               <input
                 type="text"
                 value={command}
                 onChange={(e) => setCommand(e.target.value)}
-                placeholder="Mô tả chất giọng hoặc dùng lệnh nhanh tại đây..."
-                className="w-full bg-white border border-black/5 rounded-[22px] pl-10 pr-5 py-5 text-[13px] text-app-text focus:outline-none focus:ring-2 focus:ring-app-accent/10 focus:border-app-accent/30 transition-all placeholder:text-gray-300 font-medium shadow-[0_4px_20px_rgba(0,0,0,0.03)]"
+                placeholder="Gõ lệnh nhanh như /voice Minh Nguyệt, /set giọng trầm ấm..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-6 pr-3 py-2 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all font-medium"
               />
             </form>
-          </div>
-        </motion.section>
 
-        {/* Controls Panel */}
-        <aside className="flex flex-col gap-6 overflow-y-auto scrollbar-hide">
-          <div className="flex items-center justify-between px-2">
-            <div className="flex items-center gap-3">
-              <div className="w-2.5 h-2.5 rounded-full bg-app-accent shadow-[0_0_10px_rgba(59,130,246,0.4)]" />
-              <span className="text-[11px] uppercase tracking-[3px] text-app-text font-black">CONTROL HUB 4.0</span>
-            </div>
-            <div className="px-3 py-1 bg-white rounded-full border border-black/5 text-[9px] text-app-dim font-black uppercase tracking-tighter shadow-sm">
-              LIVE BROADCAST
+            <div className="relative">
+              <button
+                onClick={() => {
+                  setShowPresets(!showPresets);
+                  setShowHelp(false);
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                <span className="hidden sm:inline">Mẫu giọng</span>
+              </button>
+
+              <AnimatePresence>
+                {showPresets && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute bottom-full right-0 mb-2 w-72 bg-white border border-slate-200 rounded-2xl p-2 shadow-xl z-50 overflow-hidden"
+                  >
+                    <div className="text-[11px] font-bold text-slate-500 px-3 py-2 border-b border-slate-100">
+                      Chọn phong cách mẫu
+                    </div>
+                    <div className="max-h-60 overflow-y-auto p-1 space-y-1">
+                      {COMMAND_PRESETS.map((p, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            setCommand(p.cmd);
+                            setShowPresets(false);
+                          }}
+                          className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors flex items-center justify-between"
+                        >
+                          <span>{p.label}</span>
+                          <ChevronRight className="w-3.5 h-3.5 text-slate-300" />
+                        </button>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
+        </section>
 
-          {/* Acting Tags Card */}
-          <div className="bg-white border border-black/5 rounded-[32px] p-7 space-y-6 shadow-xl relative overflow-hidden group/tags transition-all hover:shadow-2xl">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-pink-200/20 blur-[60px] pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-blue-200/10 blur-[50px] pointer-events-none" />
-            
-            <div className="flex items-center justify-between relative z-10">
-              <h3 className="text-[12px] uppercase tracking-[2px] text-app-text font-black flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-pink-50 border border-pink-100 shadow-sm">
-                  <Layout className="w-5 h-5 text-app-secondary" />
+        {/* RIGHT COLUMN: Controls & Audio Player */}
+        <aside className="flex flex-col gap-5">
+          {/* Voice Selector Card - FULLY REFACTORED TO GUARANTEE ACCURATE SELECTION */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-xl bg-blue-50 text-blue-600 border border-blue-100">
+                  <Mic2 className="w-4 h-4" />
                 </div>
-                Cảm xúc kịch bản
-              </h3>
-              <div className="flex gap-2">
-                <button 
-                  onClick={validateTags}
-                  className={`px-4 py-2 rounded-xl transition-all shadow-sm font-black text-[10px] uppercase tracking-wider border ${
-                    tagValidationReport ? "bg-app-secondary text-white border-app-secondary shadow-pink-200" : "bg-white hover:bg-gray-50 text-app-text border-black/5"
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Chọn Giọng Nghệ Sĩ</h3>
+                  <p className="text-[11px] text-slate-500">Chuẩn âm sắc 3 miền Bắc, Trung, Nam</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowCustomPersonaBox(!showCustomPersonaBox)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all ${
+                  showCustomPersonaBox || vocalInstruction 
+                    ? 'bg-purple-50 text-purple-700 border-purple-200' 
+                    : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                }`}
+                title="Tùy chỉnh phong cách giọng đọc theo ý muốn của bạn"
+              >
+                + Tùy biến giọng
+              </button>
+            </div>
+
+            {/* Region Filter Tabs */}
+            <div className="grid grid-cols-4 gap-1 p-1 bg-slate-100 rounded-xl text-xs font-bold text-center">
+              {(['All', 'Nam', 'Bắc', 'Trung'] as const).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setRegionFilter(r)}
+                  className={`py-1.5 rounded-lg transition-all ${
+                    regionFilter === r 
+                      ? 'bg-white text-blue-600 shadow-sm' 
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  <ShieldCheck className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-4 gap-3 max-h-[320px] overflow-y-auto pr-1 custom-scrollbar relative z-10 p-1">
-              {[
-                { tag: "[warm]", desc: "Ấm p", icon: "🔥" },
-                { tag: "[whisper]", desc: "Thì", icon: "👂" },
-                { tag: "[tension]", desc: "Kịch", icon: "🌋" },
-                { tag: "[joy]", desc: "Vui", icon: "✨" },
-                { tag: "[sadness]", desc: "Sầu", icon: "💧" },
-                { tag: "[anger]", desc: "Giận", icon: "⚡" },
-                { tag: "[fear]", desc: "Sợ", icon: "🕯️" },
-                { tag: "[mystery]", desc: "Lạ", icon: "🎭" },
-                { tag: "[hát]", desc: "Hát", icon: "🎤" },
-                { tag: "[cười lớn]", desc: "Cười lớn", icon: "😆" },
-                { tag: "[cười khúc khích]", desc: "Khúc khích", icon: "🤭" },
-                { tag: "[quát lớn]", desc: "Quát lớn", icon: "🗯️" },
-                { tag: "[hào hứng]", desc: "Hào hứng", icon: "🤩" },
-                { tag: "[nhẹ nhàng]", desc: "Nhẹ nhàng", icon: "🌬️" }
-              ].map((item) => (
-                <button
-                  key={item.tag}
-                  onClick={() => insertTag(item.tag)}
-                  className="flex flex-col items-center justify-center p-3.5 rounded-2xl border border-black/5 bg-gray-50/50 hover:bg-white hover:border-app-accent hover:shadow-lg transition-all gap-2 group/btn active:scale-95 text-center"
-                >
-                  <span className="text-xl group-hover/btn:scale-125 transition-transform">{item.icon}</span>
-                  <span className="text-[9px] font-black uppercase text-app-dim group-hover/btn:text-app-accent">{item.desc}</span>
+                  {r === 'All' ? 'Tất cả (13)' : `Miền ${r}`}
                 </button>
               ))}
             </div>
-          </div>
 
-          {/* Voice Settings Card */}
-          <div className="bg-white border border-black/5 rounded-[32px] p-7 space-y-7 shadow-xl relative overflow-hidden transition-all hover:shadow-2xl flex-1">
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-blue-100/30 blur-[80px] pointer-events-none" />
-            
-            <div className="flex items-center justify-between relative z-10">
-              <h3 className="text-[12px] uppercase tracking-[2px] text-app-text font-black flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-blue-50 border border-blue-100 shadow-sm">
-                  <Mic2 className="w-5 h-5 text-app-accent" />
+            {/* Search Box for Voices */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={voiceSearchQuery}
+                onChange={(e) => setVoiceSearchQuery(e.target.value)}
+                placeholder="Tìm nghệ sĩ theo tên, miền hoặc phong thái..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white"
+              />
+              {voiceSearchQuery && (
+                <button
+                  onClick={() => setVoiceSearchQuery("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            {/* Currently Active Voice Highlight */}
+            <div className="p-3 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-transparent border border-blue-200/80 rounded-2xl flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-600 text-white font-bold flex items-center justify-center text-sm shadow-sm">
+                  {selectedVoice.name[0]}
                 </div>
-                Cấu hình giọng đọc
-              </h3>
-              <div className="p-1 px-3 bg-blue-50 rounded-full text-[9px] font-black text-app-accent uppercase tracking-tighter">
-                Manual Control
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-sm text-slate-900">{selectedVoice.name}</span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      selectedVoice.gender === 'Nam' ? 'bg-blue-100 text-blue-800' : 'bg-pink-100 text-pink-800'
+                    }`}>
+                      {selectedVoice.gender} • Miền {selectedVoice.region}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 line-clamp-1">{selectedVoice.description}</p>
+                </div>
+              </div>
+              <div className="w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Check className="w-3.5 h-3.5" />
               </div>
             </div>
 
-            <div className="space-y-8 relative z-10">
-              <div className="space-y-4">
-                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-[2px] text-app-dim px-1">
-                  <div className="flex items-center gap-2">
-                    <Target className="w-3.5 h-3.5" /> Thống kê giọng
+            {/* Expandable Custom Voice Persona Box ("theo ý muốn") */}
+            <AnimatePresence>
+              {(showCustomPersonaBox || vocalInstruction) && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="p-3 bg-purple-50/70 border border-purple-200 rounded-2xl space-y-2 text-xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-purple-900 flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                      Tùy biến phong cách giọng đọc theo ý muốn:
+                    </span>
+                    {vocalInstruction && (
+                      <span className="text-[10px] bg-purple-200 text-purple-800 px-1.5 py-0.5 rounded font-bold">
+                        Đang áp dụng
+                      </span>
+                    )}
                   </div>
-                  <span className="text-app-accent">{speed}x / {pitch}pt</span>
-                </div>
-                <div className="space-y-6 bg-gray-50 p-5 rounded-3xl border border-black/5 shadow-inner">
-                  <div className="space-y-2.5">
-                    <div className="flex justify-between text-[9px] font-black uppercase text-app-dim/60">
-                      <span>Tốc độ đọc</span>
-                      <span className={speed > 1 ? "text-app-secondary" : "text-app-accent"}>{speed}x</span>
-                    </div>
-                    <input 
-                      type="range" min="0.5" max="2.0" step="0.1" value={speed} 
-                      onChange={(e) => setSpeed(parseFloat(e.target.value))}
-                      className="w-full h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-app-accent custom-range"
+                  
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      value={customPersonaInput}
+                      onChange={(e) => setCustomPersonaInput(e.target.value)}
+                      placeholder="VD: Giọng mẹ hiền kể chuyện cổ tích, giọng phát thanh viên thời sự..."
+                      className="flex-1 bg-white border border-purple-200 rounded-xl px-3 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-purple-500"
                     />
-                  </div>
-                  <div className="space-y-2.5">
-                    <div className="flex justify-between text-[9px] font-black uppercase text-app-dim/60">
-                      <span>Tông giọng</span>
-                      <span className={pitch > 0 ? "text-app-secondary" : "text-app-accent"}>{pitch}pt</span>
-                    </div>
-                    <input 
-                      type="range" min="-20" max="20" step="1" value={pitch} 
-                      onChange={(e) => setPitch(parseInt(e.target.value))}
-                      className="w-full h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-app-accent custom-range"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-[2px] text-app-dim px-1">
-                  <div className="flex items-center gap-2">
-                    <Layers className="w-3.5 h-3.5" /> Thư viện nghệ sĩ
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 gap-2 max-h-[320px] overflow-y-auto pr-1 custom-scrollbar scroll-smooth">
-                  {VOICES.map((voice) => (
                     <button
-                      key={voice.id}
-                      onClick={() => setSelectedVoiceId(voice.id)}
-                      className={`flex items-center p-3.5 rounded-2xl border transition-all gap-4 relative overflow-hidden group/voice ${
-                        selectedVoiceId === voice.id 
-                          ? "bg-app-accent text-white border-app-accent shadow-lg shadow-blue-200" 
-                          : "bg-white border-black/5 text-app-text hover:bg-gray-50 hover:border-app-accent/20"
-                      }`}
+                      onClick={handleApplyCustomPersona}
+                      className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl text-xs transition-colors shadow-xs"
                     >
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-serif text-lg font-black transition-all ${
-                        selectedVoiceId === voice.id ? "bg-white/20 scale-110" : "bg-blue-50 text-app-accent group-hover/voice:bg-app-accent/10"
-                      }`}>
-                        {voice.name[0]}
-                      </div>
-                      <div className="flex-1 text-left">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[12px] font-black uppercase tracking-tight">{voice.name}</span>
-                          <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-tighter ${
-                            selectedVoiceId === voice.id ? "bg-white/20" : "bg-gray-100 text-app-dim"
-                          }`}>{voice.region}</span>
-                        </div>
-                        <p className={`text-[9px] mt-1 font-medium leading-tight ${selectedVoiceId === voice.id ? "text-white/70" : "text-app-dim"}`}>
-                          {voice.description}
-                        </p>
-                      </div>
-                      {selectedVoiceId === voice.id && (
-                        <motion.div layoutId="active-voice" className="absolute left-0 top-0 bottom-0 w-1 bg-white" />
-                      )}
+                      Lưu
                     </button>
-                  ))}
+                  </div>
+
+                  {/* Suggestion Chips */}
+                  <div className="flex flex-wrap gap-1 pt-1">
+                    {CUSTOM_PERSONA_SUGGESTIONS.map((s, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          setCustomPersonaInput(s);
+                          setVocalInstruction(s);
+                          setCommandFeedback(`Đã áp dụng: "${s}"`);
+                          setTimeout(() => setCommandFeedback(null), 3000);
+                        }}
+                        className="text-[10px] px-2 py-0.5 bg-white border border-purple-200 text-purple-800 hover:bg-purple-100 rounded-md transition-colors"
+                      >
+                        + {s}
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Voices List with Scroll */}
+            <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+              {filteredVoices.map((voice) => {
+                const isSelected = selectedVoiceId === voice.id;
+                return (
+                  <button
+                    key={voice.id}
+                    onClick={() => handleSelectVoice(voice)}
+                    className={`w-full p-2.5 rounded-2xl border text-left flex items-center gap-3 transition-all ${
+                      isSelected
+                        ? 'border-blue-500 bg-blue-50/80 shadow-xs ring-2 ring-blue-100'
+                        : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
+                      isSelected 
+                        ? 'bg-blue-600 text-white' 
+                        : voice.gender === 'Nam' ? 'bg-blue-100 text-blue-700' : 'bg-pink-100 text-pink-700'
+                    }`}>
+                      {voice.name[0]}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className={`text-xs font-bold truncate ${isSelected ? 'text-blue-900 font-extrabold' : 'text-slate-800'}`}>
+                          {voice.name}
+                        </span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                            voice.gender === 'Nam' ? 'bg-blue-50 text-blue-600' : 'bg-pink-50 text-pink-600'
+                          }`}>
+                            {voice.gender}
+                          </span>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">
+                            {voice.region}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-slate-500 truncate leading-tight mt-0.5">
+                        {voice.description}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Voice Tuning Sliders (Speed & Pitch) */}
+          <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                <Sliders className="w-3.5 h-3.5 text-blue-600" />
+                Tinh Chỉnh Tốc Độ & Tông Giọng
+              </span>
+              <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                {speed}x / {pitch > 0 ? `+${pitch}` : pitch}pt
+              </span>
+            </div>
+
+            <div className="space-y-4 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+              {/* Speed Slider */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs font-semibold text-slate-700">
+                  <span>Tốc độ nói</span>
+                  <span className={speed !== 1.0 ? "text-blue-600 font-bold" : "text-slate-500"}>
+                    {speed}x {speed === 1.0 ? "(Chuẩn)" : speed > 1.0 ? "(Nhanh)" : "(Chậm)"}
+                  </span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0.5" 
+                  max="2.0" 
+                  step="0.1" 
+                  value={speed} 
+                  onChange={(e) => setSpeed(parseFloat(e.target.value))}
+                  className="w-full h-1.5 bg-slate-200 rounded-full appearance-none cursor-pointer accent-blue-600"
+                />
+                <div className="flex justify-between text-[10px] text-slate-400 font-medium px-0.5">
+                  <button onClick={() => setSpeed(0.8)} className="hover:text-blue-600">0.8x</button>
+                  <button onClick={() => setSpeed(1.0)} className="hover:text-blue-600">1.0x (Chuẩn)</button>
+                  <button onClick={() => setSpeed(1.2)} className="hover:text-blue-600">1.2x</button>
+                </div>
+              </div>
+
+              {/* Pitch Slider */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs font-semibold text-slate-700">
+                  <span>Tông giọng (Cao / Trầm)</span>
+                  <span className={pitch !== 0 ? "text-blue-600 font-bold" : "text-slate-500"}>
+                    {pitch > 0 ? `+${pitch} (Thanh)` : pitch < 0 ? `${pitch} (Trầm)` : "0 (Tự nhiên)"}
+                  </span>
+                </div>
+                <input 
+                  type="range" 
+                  min="-20" 
+                  max="20" 
+                  step="1" 
+                  value={pitch} 
+                  onChange={(e) => setPitch(parseInt(e.target.value))}
+                  className="w-full h-1.5 bg-slate-200 rounded-full appearance-none cursor-pointer accent-blue-600"
+                />
+                <div className="flex justify-between text-[10px] text-slate-400 font-medium px-0.5">
+                  <button onClick={() => setPitch(-10)} className="hover:text-blue-600">-10 (Trầm)</button>
+                  <button onClick={() => setPitch(0)} className="hover:text-blue-600">0 (Chuẩn)</button>
+                  <button onClick={() => setPitch(10)} className="hover:text-blue-600">+10 (Thanh)</button>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Player Card */}
-          <div className={`mt-auto rounded-[32px] overflow-hidden flex flex-col transition-all duration-700 shadow-2xl border relative group/player ${
-            audioUrl ? "bg-app-accent text-white border-app-accent shadow-blue-200" : "bg-white border-black/5 text-app-text"
+          {/* Player & Action Card */}
+          <div className={`rounded-3xl border transition-all duration-300 shadow-sm relative overflow-hidden ${
+            audioUrl 
+              ? "bg-gradient-to-b from-blue-600 to-indigo-700 text-white border-blue-600 shadow-lg" 
+              : "bg-white border-slate-200 text-slate-900"
           }`}>
-            <div className="p-6 md:p-8 flex flex-col items-center gap-6 relative z-10">
-              <div className="w-full flex items-center justify-between">
-                <div className="flex items-center gap-2.5 text-[10px] uppercase tracking-[2px] font-black">
-                  <div className={`w-2.5 h-2.5 rounded-full ${audioUrl ? "bg-white animate-pulse shadow-lg" : "bg-gray-200"}`} />
-                  {isGenerating ? "Processing AI..." : audioUrl ? "Ready for playback" : "System Standby"}
+            <div className="p-5 md:p-6 flex flex-col items-center gap-4 relative z-10">
+              {/* Status Header */}
+              <div className="w-full flex items-center justify-between text-xs font-bold">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${audioUrl ? 'bg-white animate-pulse' : 'bg-emerald-500'}`} />
+                  <span>
+                    {isGenerating 
+                      ? "Đang xử lý âm thanh..." 
+                      : audioUrl 
+                        ? "Bản thu đã sẵn sàng" 
+                        : "Sẵn sàng chuyển giọng"}
+                  </span>
                 </div>
                 {audioUrl && (
-                  <div className="text-[11px] font-mono font-black opacity-80 bg-black/10 px-3 py-1 rounded-lg">
-                    {formatTime(currentTime)} <span className="opacity-40 px-1">|</span> {formatTime(duration)}
-                  </div>
+                  <span className="font-mono bg-black/20 px-2 py-0.5 rounded text-[11px]">
+                    {formatTime(currentTime)} / {formatTime(duration)}
+                  </span>
                 )}
               </div>
 
-              {/* Action & Play Controls Row */}
-              <div className="w-full flex gap-4">
+              {/* Main CTA Button */}
+              <div className="w-full flex gap-3">
                 <button
                   disabled={isGenerating || !transcript.trim()}
                   onClick={handleGenerate}
-                  className={`flex-1 py-4.5 rounded-2xl font-black tracking-[2px] uppercase text-[12px] transition-all active:scale-[0.98] flex items-center justify-center gap-3 shadow-xl relative overflow-hidden ${
+                  className={`flex-1 py-4 rounded-2xl font-bold uppercase tracking-wider text-xs transition-all flex items-center justify-center gap-2 shadow-md active:scale-98 ${
                     audioUrl 
-                      ? "bg-white text-app-accent hover:shadow-2xl active:bg-gray-50" 
-                      : "bg-app-accent text-white hover:shadow-blue-300 disabled:bg-gray-100 disabled:text-gray-300 disabled:shadow-none"
+                      ? "bg-white text-blue-700 hover:bg-slate-50" 
+                      : "bg-blue-600 hover:bg-blue-700 text-white disabled:bg-slate-200 disabled:text-slate-400 disabled:shadow-none"
                   }`}
                 >
                   <RefreshCw className={`w-4 h-4 ${isGenerating ? "animate-spin" : ""}`} />
-                  {audioUrl ? "TÁI TẠO LẠI" : "BẮT ĐẦU CHUYỂN GIỌNG"}
+                  <span>{audioUrl ? "TÁI TẠO BẢN THU MỚI" : "BẮT ĐẦU CHUYỂN GIỌNG AI"}</span>
                 </button>
 
                 {audioUrl && (
                   <button 
                     onClick={togglePlay}
-                    className="w-16 h-16 rounded-2xl bg-white text-app-accent flex items-center justify-center hover:scale-105 transition-all active:scale-95 shadow-xl border border-white/20"
+                    className="w-14 h-14 rounded-2xl bg-white text-blue-600 flex items-center justify-center hover:scale-105 active:scale-95 shadow-md border border-white/30 shrink-0"
+                    title={isPlaying ? "Tạm dừng" : "Phát"}
                   >
-                    {isPlaying ? <Pause className="w-7 h-7 fill-current" /> : <Play className="w-7 h-7 fill-current ml-1" />}
+                    {isPlaying ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current ml-0.5" />}
                   </button>
                 )}
               </div>
 
-              {/* Audio Progress & Export Row */}
+              {/* Instant Web Speech Preview Button (Zero Quota) */}
+              <button
+                type="button"
+                onClick={handleWebSpeechPreview}
+                className={`w-full py-2.5 px-4 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                  isWebSpeechPlaying
+                    ? 'bg-amber-100 text-amber-900 border-amber-300 animate-pulse'
+                    : 'bg-white/10 hover:bg-white/20 text-white border-white/20'
+                }`}
+                title="Đọc trực tiếp bằng giọng đọc trình duyệt máy tính/điện thoại, không tốn hạn mức AI"
+              >
+                <Volume2 className="w-4 h-4" />
+                <span>
+                  {isWebSpeechPlaying 
+                    ? "DỪNG ĐỌC THỬ (TRÌNH DUYỆT)" 
+                    : "ĐỌC THỬ KỊCH BẢN (WEB SPEECH - KHÔNG TỐN LƯỢT AI)"}
+                </span>
+              </button>
+
+              {/* Audio Controls and Download Options */}
               <AnimatePresence>
                 {audioUrl && (
                   <motion.div 
                     initial={{ height: 0, opacity: 0 }}
                     animate={{ height: "auto", opacity: 1 }}
-                    className="w-full space-y-5"
+                    className="w-full space-y-3.5 pt-2 border-t border-white/20"
                   >
-                    <div className="relative pt-2">
-                       <input 
+                    {/* Scrub bar */}
+                    <div className="space-y-1">
+                      <input 
                         type="range"
                         min="0"
-                        max={duration || 0}
-                        step="0.1"
+                        max={duration > 0 ? duration : 0}
+                        step="0.05"
                         value={currentTime}
                         onChange={(e) => {
                           const time = parseFloat(e.target.value);
-                          if (audioRef.current) audioRef.current.currentTime = time;
+                          if (audioRef.current) {
+                            audioRef.current.currentTime = time;
+                          }
                           setCurrentTime(time);
                         }}
-                        className="w-full h-1.5 bg-black/10 rounded-full appearance-none cursor-pointer accent-white hover:accent-gray-100 transition-all"
+                        className="w-full h-2 bg-black/25 rounded-full appearance-none cursor-pointer accent-white"
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="relative group/sel">
-                        <select 
-                          value={downloadFormat}
-                          onChange={(e) => setDownloadFormat(e.target.value as any)}
-                          className="w-full bg-black/10 border border-white/10 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-wider text-white focus:outline-none cursor-pointer hover:bg-black/20 transition-all appearance-none"
-                        >
-                          <option value="mp3">Format: MP3</option>
-                          <option value="wav">Format: WAV</option>
-                          <option value="flac">Format: FLAC</option>
-                          <option value="aac">Format: AAC</option>
-                          <option value="ogg">Format: OGG</option>
-                        </select>
-                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
-                          <ChevronRight className="w-3.5 h-3.5 rotate-90 opacity-40" />
-                        </div>
-                      </div>
+                    {/* Format options */}
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <select 
+                        value={downloadFormat}
+                        onChange={(e) => setDownloadFormat(e.target.value as any)}
+                        className="w-full bg-black/20 border border-white/20 rounded-xl px-3 py-2 text-white font-bold focus:outline-none cursor-pointer"
+                      >
+                        <option value="mp3" className="text-slate-900">Định dạng: MP3</option>
+                        <option value="wav" className="text-slate-900">Định dạng: WAV (Lossless)</option>
+                      </select>
                       
-                      <div className="flex gap-2">
+                      <div className="flex gap-1.5">
                         <select 
                           value={downloadBitrate}
                           disabled={downloadFormat !== 'mp3'}
                           onChange={(e) => setDownloadBitrate(parseInt(e.target.value))}
-                          className="flex-1 bg-black/10 border border-white/10 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-wider text-white focus:outline-none cursor-pointer hover:bg-black/20 transition-all disabled:opacity-30 appearance-none text-center"
+                          className="flex-1 bg-black/20 border border-white/20 rounded-xl px-2 py-2 text-white font-bold focus:outline-none cursor-pointer disabled:opacity-40 text-center"
                         >
-                          <option value="128">128kbps</option>
-                          <option value="192">192kbps</option>
-                          <option value="320">320kbps</option>
+                          <option value="128" className="text-slate-900">128 kbps</option>
+                          <option value="192" className="text-slate-900">192 kbps</option>
+                          <option value="320" className="text-slate-900">320 kbps</option>
                         </select>
                         <button 
                           onClick={() => setIsStereoExport(!isStereoExport)}
-                          className={`w-14 rounded-xl border border-white/10 text-[9px] font-black uppercase transition-all ${isStereoExport ? 'bg-white text-app-accent' : 'bg-black/10 text-white'}`}
+                          className={`px-3 rounded-xl border border-white/20 font-bold uppercase transition-all ${
+                            isStereoExport ? 'bg-white text-blue-700' : 'bg-black/20 text-white'
+                          }`}
+                          title={isStereoExport ? "Đang xuất Stereo 2 kênh" : "Đang xuất Mono 1 kênh"}
                         >
-                          {isStereoExport ? "STE" : "MON"}
+                          {isStereoExport ? "Stereo" : "Mono"}
                         </button>
                       </div>
                     </div>
 
+                    {/* Download Button */}
                     <button 
                       onClick={handleDownload}
-                      className="w-full py-4 rounded-xl bg-white text-app-accent hover:shadow-2xl active:scale-[0.98] transition-all flex items-center justify-center gap-3 border border-white/20"
+                      className="w-full py-3.5 rounded-xl bg-white text-blue-700 hover:bg-slate-50 font-bold text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-md active:scale-98"
                     >
                       <Download className="w-4 h-4" />
-                      <span className="text-[11px] font-black uppercase tracking-[3px]">TẢI XUỐNG BẢN THU</span>
+                      <span>TẢI XUỐNG BẢN THU (.{(downloadFormat).toUpperCase()})</span>
                     </button>
                   </motion.div>
                 )}
               </AnimatePresence>
-              
-              {audioUrl && (
-                <audio 
-                  ref={audioRef}
-                  key={audioUrl}
-                  src={audioUrl} 
-                  onTimeUpdate={() => audioRef.current && setCurrentTime(audioRef.current.currentTime)}
-                  onLoadedMetadata={() => audioRef.current && setDuration(audioRef.current.duration)}
-                  onEnded={() => setIsPlaying(false)}
-                  className="hidden"
-                />
-              )}
+
+              {/* Native Audio Element */}
+              <audio 
+                ref={audioRef}
+                src={audioUrl || undefined}
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onEnded={() => {
+                  setIsPlaying(false);
+                  setCurrentTime(0);
+                }}
+                onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+                onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+                className="hidden"
+              />
             </div>
           </div>
         </aside>
       </main>
 
-      <footer className="h-14 px-6 lg:px-10 border-t border-black/5 flex items-center justify-between text-[10px] text-app-dim uppercase tracking-[3px] z-10 bg-white/60 backdrop-blur-md">
-        <div className="hidden lg:flex gap-10 font-black">
-          <span className="flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-blue-500" /> Latency: 180ms</span>
-          <span className="flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-pink-500" /> High-Res: 48kHz</span>
-          <span className="flex items-center gap-2"><div className="w-1 h-1 rounded-full bg-indigo-500" /> AI Engine: v4.1</span>
+      {/* Footer */}
+      <footer className="h-14 px-6 lg:px-10 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 z-10 bg-white/70 backdrop-blur-md">
+        <div className="flex items-center gap-6 font-medium">
+          <span className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-500" /> Chuẩn âm thanh: 24kHz Mono/Stereo</span>
+          <span className="hidden sm:flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-pink-500" /> Hỗ trợ 13 giọng đọc 3 miền & tùy biến</span>
         </div>
         
-        <div className="flex-1 flex justify-center lg:justify-end gap-8 items-center">
-          <div className="text-[14px] tracking-normal uppercase font-serif text-app-text font-black">
-            MADE WITH ❤️ BY <a href="https://tranthanhphucbvdkgr.bio.link" target="_blank" rel="noopener noreferrer" className="text-app-accent hover:underline decoration-blue-200">TRẦN THANH PHÚC</a>
-          </div>
-          <span className="flex items-center gap-2 text-app-accent font-black">
-            <div className="w-2 h-2 rounded-full bg-blue-500 animate-ping" />
-            LIVE
+        <div className="flex items-center gap-4">
+          <span className="font-semibold text-slate-700">
+            Ứng dụng phát triển bởi <a href="https://tranthanhphucbvdkgr.bio.link" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Trần Thanh Phúc</a>
           </span>
         </div>
       </footer>
+
+      {/* Tag Validation Report Modal */}
+      <AnimatePresence>
+        {showTagReportModal && tagValidationReport && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[120] bg-black/40 backdrop-blur-xs flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 15 }}
+              className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-slate-900">Báo cáo kiểm tra thẻ cảm xúc</h3>
+                    <p className="text-[11px] text-slate-500">Phát hiện thẻ sai chính tả hoặc lỗi ngoặc</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setShowTagReportModal(false)}
+                  className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-700"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {tagValidationReport.unknown.length === 0 && 
+               tagValidationReport.malformed.length === 0 && 
+               tagValidationReport.duplicate.length === 0 ? (
+                <div className="py-6 flex flex-col items-center gap-2.5 text-center">
+                  <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                    <CheckCircle2 className="w-6 h-6" />
+                  </div>
+                  <h4 className="font-bold text-sm text-emerald-800">Tất cả thẻ đều hợp lệ!</h4>
+                  <p className="text-xs text-slate-500 max-w-xs">
+                    Mọi thẻ cảm xúc trong kịch bản đều chuẩn xác và được mô hình AI nhận diện tối ưu.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                  {tagValidationReport.unknown.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="text-xs font-bold text-amber-700 flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5" /> Thẻ chưa nhận diện ({tagValidationReport.unknown.length})
+                      </div>
+                      {tagValidationReport.unknown.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-2.5 bg-amber-50 rounded-xl border border-amber-200 text-xs">
+                          <span className="font-mono font-bold text-amber-900">{item.tag}</span>
+                          {item.suggestion ? (
+                            <button 
+                              onClick={() => fixSingleTag(item.tag, item.suggestion!)}
+                              className="px-2 py-1 bg-amber-200 hover:bg-amber-300 text-amber-900 font-bold rounded-lg transition-colors text-[11px]"
+                            >
+                              Sửa thành {item.suggestion}
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-amber-600 italic">Không có gợi ý</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {tagValidationReport.malformed.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="text-xs font-bold text-red-600 flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5" /> Lỗi ngoặc ({tagValidationReport.malformed.length})
+                      </div>
+                      {tagValidationReport.malformed.map((err, idx) => (
+                        <div key={idx} className="p-2 bg-red-50 rounded-xl border border-red-200 text-xs text-red-800">
+                          {err}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                {tagValidationReport.unknown.some(u => u.suggestion) && (
+                  <button 
+                    onClick={autoFixAllTags}
+                    className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+                  >
+                    Tự động sửa toàn bộ
+                  </button>
+                )}
+                <button 
+                  onClick={() => setShowTagReportModal(false)}
+                  className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold"
+                >
+                  Đóng
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Modern Notification Toast */}
       <AnimatePresence>
         {(error || commandFeedback) && (
           <motion.div 
             key="notification-toast"
-            initial={{ opacity: 0, y: 50, scale: 0.9 }} 
+            initial={{ opacity: 0, y: 30, scale: 0.95 }} 
             animate={{ opacity: 1, y: 0, scale: 1 }} 
-            exit={{ opacity: 0, y: 20, scale: 0.9 }}
-            className={`fixed bottom-10 left-1/2 -translate-x-1/2 z-[100] px-8 py-5 rounded-[24px] shadow-[0_25px_60px_rgba(0,0,0,0.15)] flex items-center gap-6 min-w-[380px] border backdrop-blur-2xl ${
-              error ? 'bg-red-50/95 border-red-100 text-red-900' : 'bg-white/95 border-blue-100 text-app-text'
+            exit={{ opacity: 0, y: 15, scale: 0.95 }}
+            className={`fixed bottom-8 left-1/2 -translate-x-1/2 z-[150] px-5 py-3.5 rounded-2xl shadow-2xl flex items-start gap-3.5 max-w-lg w-[92vw] border backdrop-blur-md ${
+              error ? 'bg-red-50/95 border-red-200 text-red-900' : 'bg-white/95 border-slate-200 text-slate-800'
             }`}
           >
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${error ? 'bg-red-100' : 'bg-blue-50'}`}>
-              {error ? <AlertCircle className="w-6 h-6 text-red-600" /> : <Sparkles className="w-6 h-6 text-app-accent" />}
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${error ? 'bg-red-100 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+              {error ? <AlertCircle className="w-5 h-5" /> : <Sparkles className="w-5 h-5" />}
             </div>
             
-            <div className="flex-1">
-              <div className={`text-[10px] uppercase tracking-widest font-black mb-1 opacity-60`}>
-                {error ? 'Hệ thống báo lỗi' : 'Hệ thống ghi nhận'}
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <div className="text-[10px] uppercase tracking-wider font-bold opacity-70">
+                {error ? 'Thông báo hệ thống' : 'Thông báo'}
               </div>
-              <div className="text-[14px] font-bold leading-tight">
+              <div className="text-xs font-medium leading-relaxed">
                 {error || commandFeedback}
               </div>
+              {error && (error.includes('hạn mức') || error.includes('Quota') || error.includes('429')) && (
+                <div className="pt-1">
+                  <button
+                    onClick={() => {
+                      setError(null);
+                      handleWebSpeechPreview();
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-lg shadow-xs transition-all"
+                  >
+                    <Volume2 className="w-3.5 h-3.5" />
+                    <span>Nghe thử kịch bản bằng Web Speech ngay</span>
+                  </button>
+                </div>
+              )}
             </div>
             
             <button 
@@ -1359,9 +1962,9 @@ export default function App() {
                 setError(null);
                 setCommandFeedback(null);
               }}
-              className="p-2 hover:bg-black/5 rounded-xl transition-all"
+              className="p-1 hover:bg-black/5 rounded-lg text-slate-400 hover:text-slate-700 transition-all shrink-0 -mr-1"
             >
-              <X className="w-5 h-5 opacity-40 hover:opacity-100" />
+              <X className="w-4 h-4" />
             </button>
           </motion.div>
         )}
