@@ -1,4 +1,12 @@
-- name: Setup Node.js
-  uses: actions/setup-node@v4
-  with:
-    node-version: 24
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true # Ép toàn hệ thống chạy Node 24
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4 # Cập nhật lên v4
+      - name: Setup Node
+        uses: actions/setup-node@v4 # Cập nhật lên v4
+        with:
+          node-version: 24 # Sửa thành số 24
